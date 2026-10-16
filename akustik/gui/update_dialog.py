@@ -285,6 +285,14 @@ class UpdateDialog(QtWidgets.QDialog):
         super().reject()
 
 
+def license_line(main_window) -> str:
+    mgr = getattr(main_window, "licenses", None)
+    if mgr is None or not mgr.enabled:
+        return ""
+    st = mgr.status()
+    return f"Lizenz: {st.message}" + (f" – {st.license.name}" if st.valid else "")
+
+
 class AboutDialog(QtWidgets.QMessageBox):
     def __init__(self, manager: UpdateManager, parent=None):
         super().__init__(parent)
@@ -293,7 +301,8 @@ class AboutDialog(QtWidgets.QMessageBox):
             f"<h3>{APP_NAME} {__version__}</h3>"
             f"Update-Kanal: {update.CHANNEL_LABELS[manager.channel]}<br>"
             f"System: {update.PLATFORM_LABELS[update.current_platform()]} · "
-            f"{'installierte Fassung' if update.is_installed_build() else 'Entwicklerfassung'}<br><br>"
+            f"{'installierte Fassung' if update.is_installed_build() else 'Entwicklerfassung'}<br>"
+            f"{license_line(parent)}<br>"
             "Messsoftware für Beschallung und Raumakustik.<br>"
             "Bibliotheken: Qt (PySide6), NumPy, SciPy, pyqtgraph, PortAudio (sounddevice), qrcode, cryptography.<br><br>"
             f"{COPYRIGHT}<br>"

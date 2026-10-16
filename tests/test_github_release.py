@@ -57,7 +57,8 @@ def test_publish_takes_signed_installer_from_github(gh):
     assert a["url"] == f"https://akmess.example.de/files/{SETUP}"
     assert (gh["pub"] / "files" / SETUP).read_bytes() == gh["payload"]
     page = (gh["pub"] / "index.html").read_text(encoding="utf-8")
-    assert 'data-repo="alex/akustikmess"' in page and "__GITHUB_REPO__" not in page
+    assert "https://github.com/alex/akustikmess/issues" in page and "{{" not in page
+    assert (gh["pub"] / "wiki" / "index.html").exists() and (gh["pub"] / "assets" / "download.js").exists()
 
 
 def test_unsigned_installer_is_rejected(gh, monkeypatch, capsys):

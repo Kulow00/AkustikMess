@@ -18,6 +18,7 @@ from .session import EXTENSION, FILE_FILTER, load_session, save_session
 from .spl_view import SPLView
 from .state import AppState
 from .tuning_dialog import TuningDialog
+from .license_dialog import LicenseDialog, LicenseManager
 from .update_dialog import AboutDialog, UpdateDialog, UpdateManager, ask_consent
 
 AUTOSAVE_INTERVAL_MS = 60_000
@@ -106,6 +107,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.state = AppState(settings)
         self.updates = UpdateManager(self.state.settings, self)
         self.updates.checked.connect(self._background_update_result)
+        self.licenses = LicenseManager(self.state.settings, self)
+        self.licenses.changed.connect(self._license_changed)
         self.session_path: str | None = None
         self.autosave_path = autosave_path or os.path.join(
             QtCore.QStandardPaths.writableLocation(QtCore.QStandardPaths.AppDataLocation),
@@ -137,6 +140,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.autosave_timer.start()
         if recovery:
             QtCore.QTimer.singleShot(300, self._check_recovery)
+        self._license_changed(self.licenses.status())
+        if self.licenses.required and not self.licenses.status().valid:
+            QtCore.QTimer.singleShot(500, self.open_license)
         if check_updates and self.updates.url:
             QtCore.QTimer.singleShot(4000, self._startup_update_check)
 
@@ -146,6 +152,32 @@ class MainWindow(QtWidgets.QMainWindow):
             ask_consent(self.updates, self)   # Netzwerkzugriff nur nach Zustimmung
         if self.updates.auto:
             self.updates.check()  # im Hintergrund, stört keine Messung
+            self.licenses.refresh_revocations()
+
+    # --- Lizenz -------------------------------------------------------------------------
+    def open_license(self) -> None:
+        LicenseDialog(self.licenses, self).exec()
+
+    def _license_changed(self, st) -> None:
+        if not self.licenses.enabled:
+            self.btn_license.hide()
+            return
+        if st.valid:
+            self.btn_license.setText(f"✔ {st.license.plan_label}")
+            self.btn_license.setStyleSheet("color: gray;")
+        elif st.state == "none":
+            self.btn_license.setText("Kostenlos registrieren")
+            self.btn_license.setStyleSheet("color: #ffaa33; font-weight: bold;")
+        else:
+            self.btn_license.setText(f"⚠ Lizenz: {st.message}")
+            self.btn_license.setStyleSheet("color: #ff5555; font-weight: bold;")
+        self.btn_license.show()
+        blocked = self.licenses.required and not st.valid
+        self.a_run.setEnabled(not blocked)
+        self.a_run.setToolTip("Bitte zuerst eine gültige Lizenz eintragen (Hilfe → Lizenz…)" if blocked
+                              else "Audio starten/stoppen (Leertaste)")
+        if blocked and self.a_run.isChecked():
+            self.a_run.setChecked(False)
 
     def open_updates(self) -> None:
         UpdateDialog(self.updates, self).exec()
@@ -183,6 +215,9 @@ class MainWindow(QtWidgets.QMainWindow):
                                   triggered=self.show_shortcuts))
         m.addSeparator()
         m.addAction(QtGui.QAction("Nach Updates suchen…", self, triggered=self.open_updates))
+        self.a_license = QtGui.QAction("Lizenz…", self, triggered=self.open_license)
+        self.a_license.setVisible(self.licenses.enabled)
+        m.addAction(self.a_license)
         m.addAction(QtGui.QAction(f"Über {APP_NAME}", self,
                                   triggered=lambda: AboutDialog(self.updates, self).exec()))
 
@@ -260,6 +295,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.btn_update.clicked.connect(self.open_updates)
         self.btn_update.hide()
         sb.addPermanentWidget(self.btn_update)
+        self.btn_license = QtWidgets.QPushButton()
+        self.btn_license.setFlat(True)
+        self.btn_license.setCursor(QtCore.Qt.PointingHandCursor)
+        self.btn_license.clicked.connect(self.open_license)
+        self.btn_license.hide()
+        sb.addPermanentWidget(self.btn_license)
         self.lbl_remote = QtWidgets.QLabel()
         self.lbl_remote.setStyleSheet("color: #66dd66;")
         sb.addPermanentWidget(self.lbl_remote)
@@ -314,6 +355,12 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._engine_changed(None)
 
     def toggle_audio(self, on: bool) -> None:
+        if on and self.licenses.required and not self.licenses.status().valid:
+            self.a_run.blockSignals(True)
+            self.a_run.setChecked(False)
+            self.a_run.blockSignals(False)
+            self.open_license()
+            return
         if on:
             try:
                 self.state.start()

@@ -8,6 +8,8 @@ einem Messmikrofon und einem handelsüblichen Audio-Interface.
 **[⬇ Download: akmess.alex-kulow.de](https://akmess.alex-kulow.de)** – die Seite erkennt dein Betriebssystem
 und bietet den passenden Installer an.
 
+**[📖 Wiki](https://akmess.alex-kulow.de/wiki/index.html)** – Anleitungen zu Messaufbau, allen Modi und häufigen Problemen (Quelle: [docs/wiki](docs/wiki)).
+
 ## Funktionen
 
 | Modus | Funktionen |

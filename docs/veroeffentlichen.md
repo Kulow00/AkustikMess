@@ -2,7 +2,11 @@
 
 Interne Anleitung für Releases von AkustikMess. Für Nutzer nicht relevant.
 Einrichtung der Code-Signatur: [signpath-einrichtung.md](signpath-einrichtung.md) ·
-Server: [server-einrichtung.md](server-einrichtung.md)
+Server: [server-einrichtung.md](server-einrichtung.md) ·
+Lizenzen und Homepage: [lizenzsystem.md](lizenzsystem.md), [lizenzserver-einrichtung.md](lizenzserver-einrichtung.md)
+
+Homepage (Startseite, Wiki aus `docs/wiki/`, Lizenz, Datenschutz, Impressum) wird bei jedem Release mitgebaut;
+nur die Homepage aktualisieren: `python tools/release.py site`.
 
 ## Versionen und Kanäle
 - Stabil: `1.2.3` · Beta: `1.3.0-beta.1`, `1.3.0-beta.2`, … → dann `1.3.0` stabil.

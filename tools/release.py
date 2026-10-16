@@ -88,11 +88,19 @@ def read_version(init_file: Path = INIT_FILE) -> str:
     return m.group(1)
 
 
-def write_version(version: str, init_file: Path = INIT_FILE) -> None:
+def write_version(version: str, init_file: Path = INIT_FILE, release_date: str | None = None) -> None:
+    """Version (und Erscheinungsdatum, das Kauflizenzen mit Update-Zeitraum prüfen) eintragen."""
     parse_version(version)
     text = init_file.read_text(encoding="utf-8")
-    init_file.write_text(re.sub(r'__version__\s*=\s*"[^"]+"', f'__version__ = "{version}"', text),
-                         encoding="utf-8")
+    text = re.sub(r'__version__\s*=\s*"[^"]+"', f'__version__ = "{version}"', text)
+    if release_date is not None:
+        text = re.sub(r'^RELEASE_DATE = "[^"]*"', f'RELEASE_DATE = "{release_date}"', text, flags=re.M)
+    init_file.write_text(text, encoding="utf-8")
+
+
+def read_release_date(init_file: Path = INIT_FILE) -> str:
+    m = re.search(r'^RELEASE_DATE = "([^"]*)"', init_file.read_text(encoding="utf-8"), re.M)
+    return m.group(1) if m else ""
 
 
 def next_version(current: str, channel: str, kind: str | None) -> str:
@@ -270,15 +278,20 @@ def publish(cfg: dict, file: Path, *, version: str, channel: str, platform: str,
     add_to_manifest(manifest, version=version, channel=channel, date=date or dt.date.today().isoformat(),
                     notes=notes, platform=platform, asset=asset, mode=cfg["mode"])
     (publish_dir / "releases.json").write_bytes(sign_manifest(manifest, private_key))
-    page = (ROOT / "installer" / "index.html").read_text(encoding="utf-8")
-    (publish_dir / "index.html").write_text(page.replace("__GITHUB_REPO__", cfg.get("github", "")),
-                                            encoding="utf-8")
+    build_site(cfg, publish_dir)
     shutil.copy2(CHANGELOG, publish_dir / "CHANGELOG.md")
     if url is None:
         log(f"\n!  Für {rel} fehlt noch der Dropbox-Freigabelink. Link in Dropbox erstellen, in "
             f"release_config.json unter dropbox_links[\"{channel}/{platform}\"] eintragen und "
             "`python tools/release.py relink` ausführen.")
     return asset
+
+
+def build_site(cfg: dict, publish_dir: Path | None = None) -> None:
+    """Homepage (Download, Wiki, Lizenz, Datenschutz, Impressum) in den Veröffentlichungsordner bauen."""
+    from tools import site  # noqa: PLC0415
+    for w in site.build(publish_dir or Path(cfg["publish_dir"]), cfg):
+        log(f"!  {w}")
 
 
 def relink(cfg: dict, private_key) -> None:
@@ -507,6 +520,16 @@ def cmd_upload(args) -> None:
     check_online(cfg)
 
 
+def cmd_site(args) -> None:
+    """Nur die Homepage neu bauen (z. B. nach Änderungen am Wiki) und hochladen."""
+    cfg = load_config()
+    build_site(cfg)
+    log(f"Homepage gebaut: {cfg['publish_dir']}")
+    if cfg.get("sftp") and not args.no_upload:
+        from tools import deploy  # noqa: PLC0415
+        deploy.upload(cfg["sftp"], Path(cfg["publish_dir"]), log=log)
+
+
 def cmd_check_online(args) -> None:
     if not check_online(load_config()):
         raise ReleaseError("Online-Prüfung fehlgeschlagen (siehe oben).")
@@ -552,13 +575,14 @@ def cmd_release(args) -> None:
     text = CHANGELOG.read_text(encoding="utf-8")
     new_text, notes = finalize_changelog(text, version, today)
     log(f"Release {current} → {version} (Kanal: {args.channel})")
-    write_version(version)
+    old_date = read_release_date()
+    write_version(version, release_date=dt.date.today().isoformat())
     CHANGELOG.write_text(new_text, encoding="utf-8")
     write_update_config(url=manifest_url(cfg))
     try:
         installer = build(version, skip_tests=args.skip_tests)
     except Exception:
-        write_version(current)  # fehlgeschlagener Build: Version und CHANGELOG zurücksetzen
+        write_version(current, release_date=old_date)  # fehlgeschlagener Build: Version und CHANGELOG zurücksetzen
         CHANGELOG.write_text(text, encoding="utf-8")
         raise
     asset = publish(cfg, installer, version=version, channel=args.channel, platform=current_platform(),
@@ -582,7 +606,8 @@ def release_via_github(cfg: dict, args) -> None:
     text = CHANGELOG.read_text(encoding="utf-8")
     new_text, _ = finalize_changelog(text, version, dt.date.today().isoformat())
     log(f"Release {current} → {version} (Kanal: {args.channel}) über GitHub {cfg['github']}")
-    write_version(version)
+    old_date = read_release_date()
+    write_version(version, release_date=dt.date.today().isoformat())
     CHANGELOG.write_text(new_text, encoding="utf-8")
     write_update_config(url=manifest_url(cfg))
     try:
@@ -591,7 +616,7 @@ def release_via_github(cfg: dict, args) -> None:
         git("add", "-A")
         git("commit", "-m", f"Release {version}")
     except Exception:
-        write_version(current)  # Tests rot: Version und CHANGELOG zurücksetzen
+        write_version(current, release_date=old_date)  # Tests rot: Version und CHANGELOG zurücksetzen
         CHANGELOG.write_text(text, encoding="utf-8")
         raise
     git("tag", "-a", f"v{version}", "-m", f"{APP} {version}")
@@ -772,6 +797,9 @@ def main(argv=None) -> int:
     p = sub.add_parser("upload", help="Veröffentlichungsordner hochladen (nur Änderungen)")
     p.add_argument("--force", action="store_true", help="alle Dateien neu hochladen")
     p.set_defaults(fn=cmd_upload)
+    p = sub.add_parser("site", help="Homepage (Download, Wiki, Lizenz) neu bauen und hochladen")
+    p.add_argument("--no-upload", action="store_true")
+    p.set_defaults(fn=cmd_site)
     p = sub.add_parser("check-online", help="Prüfen, ob Updates für Nutzer erreichbar und gültig sind")
     p.set_defaults(fn=cmd_check_online)
     p = sub.add_parser("status", help="Veröffentlichte Versionen anzeigen")

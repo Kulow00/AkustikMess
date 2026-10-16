@@ -11,6 +11,11 @@ Veröffentlichen den Abschnitt der neuen Version und übernimmt ihn als Patch No
 
 ## [Unreleased]
 
+### Neu
+- Lizenzen: kostenlose Registrierung mit persönlichem Lizenzschlüssel (Hilfe → Lizenz…); die Prüfung läuft nur auf dem eigenen Rechner
+- Neue Homepage mit Wiki (Erste Schritte, Messaufbau, alle Modi, Fernbedienung, Lizenz, häufige Probleme), Datenschutz und Impressum
+- Über AkustikMess zeigt die Lizenz
+
 ## [0.5.0-beta.3] - 2026-10-16
 
 ### Neu

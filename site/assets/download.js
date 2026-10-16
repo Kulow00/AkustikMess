@@ -1,73 +1,5 @@
-<!doctype html>
-<html lang="de">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AkustikMess herunterladen</title>
-<style>
-:root{--bg:#f6f7f9;--card:#fff;--text:#1d2129;--dim:#5f6670;--line:#dfe3e8;--accent:#1f6fd1;--beta:#b26a00}
-@media (prefers-color-scheme:dark){:root{--bg:#16181c;--card:#202329;--text:#e7e9ec;--dim:#9aa1aa;--line:#33373e;--accent:#4c97ff;--beta:#ffb547}}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 -apple-system,Segoe UI,Roboto,sans-serif}
-main{max-width:760px;margin:0 auto;padding:32px 16px 64px}
-h1{margin:0 0 4px;font-size:30px}
-.sub{color:var(--dim);margin:0 0 24px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:16px}
-.primary{display:block;width:100%;text-align:center;background:var(--accent);color:#fff;text-decoration:none;
-font-weight:700;font-size:18px;padding:16px;border-radius:12px}
-.primary.disabled{background:var(--line);color:var(--dim);pointer-events:none}
-.meta{color:var(--dim);font-size:14px;margin-top:10px;word-break:break-all}
-.others a{display:inline-block;margin:6px 12px 0 0;color:var(--accent)}
-.toggle{display:flex;gap:6px;margin-bottom:16px}
-.toggle button{flex:1;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--card);
-color:var(--text);font-size:15px;cursor:pointer}
-.toggle button.sel{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);font-weight:700}
-.badge{display:inline-block;font-size:12px;font-weight:700;padding:2px 8px;border-radius:99px;
-background:var(--beta);color:#000;margin-left:6px;vertical-align:middle}
-.notes h3{margin:18px 0 4px;font-size:17px}.notes .date{color:var(--dim);font-size:13px}
-.notes ul{margin:6px 0 0 20px;padding:0}
-.hint{font-size:14px;color:var(--dim)}
-code{background:var(--bg);padding:1px 5px;border-radius:5px}
-footer{margin-top:24px;text-align:center;line-height:1.8}footer a{color:var(--accent)}
-</style>
-</head>
-<body>
-<main>
-  <h1>AkustikMess</h1>
-  <p class="sub">Messsoftware für Beschallung und Raumakustik</p>
-
-  <div class="toggle" role="tablist">
-    <button id="tStable" class="sel">Stabil</button>
-    <button id="tBeta">Beta <span class="badge">Vorabversion</span></button>
-  </div>
-
-  <div class="card">
-    <a id="dl" class="primary disabled" href="#">Lade …</a>
-    <div class="meta" id="meta"></div>
-    <div class="others" id="others"></div>
-  </div>
-
-  <div class="card hint" id="hint"></div>
-
-  <div class="card notes"><h2 style="margin-top:0">Neuerungen</h2><div id="notes">–</div></div>
-
-  <div class="card" id="issues" hidden>
-    <h2 style="margin-top:0">Fehler gefunden oder eine Idee?</h2>
-    <p style="margin:0 0 12px">Alle Fehlermeldungen und Vorschläge werden gesammelt auf GitHub erfasst und dort
-      ausgewertet. Bitte gib Betriebssystem, AkustikMess-Version (Hilfe → Über AkustikMess), Audio-Interface und
-      die Schritte an, die zum Fehler führen. Für eine Meldung ist ein kostenloses GitHub-Konto nötig.</p>
-    <a class="primary" id="issueNew" href="#">Fehler melden</a>
-    <div class="meta"><a id="issueList" href="#" style="color:var(--accent)">Bekannte Fehler und offene Meldungen ansehen</a></div>
-  </div>
-
-  <footer class="hint" id="foot" data-repo="__GITHUB_REPO__">
-    © 2026 Alex Kulow · Open Source unter GPL-3.0.
-    <span id="links"></span><br>
-    Free code signing provided by <a href="https://about.signpath.io/">SignPath.io</a>,
-    certificate by <a href="https://signpath.org/">SignPath Foundation</a>.
-  </footer>
-</main>
-<script>
+// Download-Bereich der Startseite: Betriebssystem erkennen, passende Datei und Patch Notes anzeigen.
+// Liest releases.json (signiert; die Signatur prüft das Programm, hier nur Anzeige).
 "use strict";
 const LABEL={windows:"Windows",macos:"macOS",linux:"Linux"};
 const HINT={
@@ -131,15 +63,6 @@ function render(){
   document.getElementById("tStable").className=channel==="stable"?"sel":"";
   document.getElementById("tBeta").className=channel==="beta"?"sel":"";
 }
-(function(){const repo=document.getElementById("foot").dataset.repo;
-  if(!/^[\w.-]+\/[\w.-]+$/.test(repo))return;  // Platzhalter nicht ersetzt → keine Links
-  const gh="https://github.com/"+repo,doc=gh+"/blob/main/";
-  document.getElementById("links").innerHTML=[["Quellcode",gh],["Lizenz",doc+"LICENSE"],
-    ["Code-Signatur &amp; Datenschutz",doc+"docs/code-signing-policy.md"],["Fremdkomponenten",doc+"docs/THIRD-PARTY-NOTICES.md"]]
-    .map(([t,u])=>'<a href="'+esc(u)+'">'+t+"</a>").join(" · ");
-  document.getElementById("issueNew").href=gh+"/issues/new/choose";
-  document.getElementById("issueList").href=gh+"/issues";
-  document.getElementById("issues").hidden=false})();
 document.getElementById("tStable").onclick=()=>{channel="stable";render()};
 document.getElementById("tBeta").onclick=()=>{channel="beta";render()};
 fetch("releases.json",{cache:"no-store"}).then(r=>r.json()).then(o=>{data=JSON.parse(o.signed);
@@ -148,6 +71,3 @@ fetch("releases.json",{cache:"no-store"}).then(r=>r.json()).then(o=>{data=JSON.p
   if(!newest(["stable"],os)&&newest(["stable","beta"],os))channel="beta";
   render()})
  .catch(()=>{document.getElementById("dl").textContent="Release-Verzeichnis nicht erreichbar"});
-</script>
-</body>
-</html>

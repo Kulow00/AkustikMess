@@ -1,0 +1,27 @@
+# Lizenzserver neben Caddy betreiben. Auf dem Server z. B. unter /srv/akmess/license/:
+#   docker compose up -d --build
+# Das Netzwerk muss dasselbe sein, in dem der Caddy-Container läuft (`docker network ls`).
+services:
+  license:
+    build:
+      context: ./src          # Kopie des Repositorys (git clone)
+      dockerfile: server/Dockerfile
+    container_name: akmess-license
+    restart: unless-stopped
+    env_file: .env            # SMTP-Zugangsdaten, siehe .env.example – nie ins Repository
+    environment:
+      AKM_SITE: https://akmess.alex-kulow.de
+    volumes:
+      - ./data:/data          # Datenbank + Serverschlüssel → in die Server-Sicherung aufnehmen
+    networks: [caddy]
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    mem_limit: 256m
+    # kein "ports:" – nur Caddy erreicht den Dienst
+
+networks:
+  caddy:
+    external: true
+    name: CADDY_NETZWERK      # ersetzen durch das Netzwerk des Caddy-Containers
