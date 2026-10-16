@@ -402,10 +402,15 @@ def authenticode(path: Path) -> tuple[str, str]:
         return "Unknown", ""
     ps = ("$s = Get-AuthenticodeSignature -LiteralPath $env:AKM_FILE; "
           "Write-Output $s.Status; Write-Output $s.SignerCertificate.Subject")
+    # PSModulePath von PowerShell 7 (z. B. auf GitHub-Rechnern) verhindert, dass Windows PowerShell
+    # sein eigenes Sicherheitsmodul lädt → ohne diese Variable starten.
+    env = {k: v for k, v in os.environ.items() if k.upper() != "PSMODULEPATH"}
     r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps], capture_output=True,
-                       text=True, env={**os.environ, "AKM_FILE": str(path)}, timeout=60)
-    lines = [ln.strip() for ln in r.stdout.splitlines()]
-    return (lines[0] if lines else "Unknown"), (lines[1] if len(lines) > 1 else "")
+                       text=True, env={**env, "AKM_FILE": str(path)}, timeout=60)
+    lines = [ln.strip() for ln in r.stdout.splitlines() if ln.strip()]
+    if not lines:
+        return "Unknown", (r.stderr or "").strip()[:300]
+    return lines[0], (lines[1] if len(lines) > 1 else "")
 
 
 def check_windows_signature(path: Path, allow_unsigned: bool = False) -> str:

@@ -89,7 +89,7 @@ def test_authenticode_detects_unsigned_and_signed(tmp_path):
     f.write_bytes(b"MZ" + b"\0" * 200)
     assert release.authenticode(f)[0] != "Valid"
     status, signer = release.authenticode(Path(os.environ["WINDIR"]) / "explorer.exe")
-    assert status == "Valid" and "Microsoft" in signer
+    assert status == "Valid" and "Microsoft" in signer, (status, signer)
 
 
 def test_release_pushes_tag(tmp_path):
