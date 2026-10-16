@@ -5,7 +5,7 @@ import time
 
 import numpy as np
 import pytest
-from PySide6 import QtCore
+from PySide6 import QtCore, QtWidgets
 
 from conftest import wait
 
@@ -62,6 +62,17 @@ def test_hover_cursor_shows_exact_frequency_and_note(window):
     assert rt.cursors[0].vline.isVisible()
     assert rt.cursors[0].vline.value() == pytest.approx(np.log10(2553.0), abs=1e-3)
     shot(win, "1b_cursor.png")
+    # Maus steht still: Messwert wird trotzdem live aktualisiert
+    original = cursor.value_fn
+    cursor.value_fn = lambda f: "Messwert: LIVE"
+    try:
+        wait(app, 0.4)
+        assert "LIVE" in cursor.label.text() and "2553 Hz" in cursor.label.text()
+        assert cursor._live.isActive()
+        QtWidgets.QApplication.sendEvent(rt.p_mag, QtCore.QEvent(QtCore.QEvent.Leave))
+        assert not cursor._live.isActive() and not cursor.label.isVisible()
+    finally:
+        cursor.value_fn = original
 
 
 def test_spectrum_peak_and_tuning_from_input(window):

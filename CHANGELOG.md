@@ -11,6 +11,9 @@ Veröffentlichen den Abschnitt der neuen Version und übernimmt ihn als Patch No
 
 ## [Unreleased]
 
+### Verbessert
+- Fadenkreuz zeigt die Messwerte live an, auch wenn die Maus im Diagramm stillsteht
+
 ## [0.5.0-beta.4] - 2026-10-16
 
 ### Neu

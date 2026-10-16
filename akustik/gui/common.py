@@ -42,6 +42,9 @@ class FreqAxis(pg.AxisItem):
         return self.tickStrings(values, scale, spacing)
 
 
+LIVE_CURSOR_MS = 150   # Aktualisierung der Fadenkreuz-Werte bei ruhender Maus (~7 pro Sekunde)
+
+
 class CursorGroup:
     """Verbindet mehrere Fadenkreuze: die senkrechte Linie folgt in allen Plots."""
 
@@ -89,6 +92,9 @@ class FreqCursor(QtCore.QObject):
         self._pending = None
         self._throttle = QtCore.QTimer(self, singleShot=True, interval=16, timeout=self._flush)
         self._last_f = None
+        # Live-Anzeige: steht die Maus still im Diagramm, Messwert trotzdem laufend aktualisieren
+        self._last_pos = None
+        self._live = QtCore.QTimer(self, interval=LIVE_CURSOR_MS, timeout=self._refresh)
         plot.scene().sigMouseMoved.connect(self._queue)
         plot.installEventFilter(self)
 
@@ -108,7 +114,15 @@ class FreqCursor(QtCore.QObject):
             self._hide()
         return False
 
+    def _refresh(self) -> None:
+        if self._last_pos is None or not self.label.isVisible() or not self.plot.isVisible():
+            self._live.stop()
+            return
+        self._moved(self._last_pos)
+
     def _hide(self) -> None:
+        self._last_pos = None
+        self._live.stop()
         if not (self.vline.isVisible() or self.label.isVisible()):
             return
         for item in (self.vline, self.hline, self.label):
@@ -160,6 +174,9 @@ class FreqCursor(QtCore.QObject):
             if not item.isVisible():
                 item.show()
         self.label.raise_()
+        self._last_pos = pos
+        if not self._live.isActive():
+            self._live.start()
         if self.group and self.freq_axis == "x":
             self.group.show_freq(self, f)
 
