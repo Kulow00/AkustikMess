@@ -11,6 +11,8 @@ Veröffentlichen den Abschnitt der neuen Version und übernimmt ihn als Patch No
 
 ## [Unreleased]
 
+## [0.5.0-beta.5] - 2026-10-16
+
 ### Neu
 - Darstellungsbereich in der Seitenleiste einstellbar: Frequenz von/bis, Pegelbereich für Spektrum und Betrag; folgt auch dem Zoomen mit der Maus
 
