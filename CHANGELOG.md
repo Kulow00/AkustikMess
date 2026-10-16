@@ -17,6 +17,11 @@ Veröffentlichen den Abschnitt der neuen Version und übernimmt ihn als Patch No
 - Raum: Reflexionen 1. Ordnung, Nachhall (aus der Impulsantwort-Messung übernehmen oder nach Sabine berechnen), STI-Karte mit Störgeräusch
 - Raum: animiertes Wellenbild in Draufsicht und Längsschnitt, Raummoden bis 250 Hz
 - Raum: 3D-Ansicht zum Drehen, weitere Hörflächen (z. B. Empore), Import gemessener Abstrahlung (Polardaten als CSV)
+- Raum: Schalter „Berechnung starten“ – gerechnet wird erst nach Klick, Lautsprecher lassen sich in Ruhe bearbeiten
+- Raum: 3D mit Seitenansicht, Draufsicht und weiteren Blickwinkeln; Abstrahlung der Tops (Achse und −6-dB-Kanten) mit Angabe, wo sie die Hörhöhe treffen
+
+### Behoben
+- Fernbedienung: Bei falschem Zugangsschlüssel kam teilweise ein Verbindungsabbruch statt der Meldung „Zugriff verweigert“
 
 ## [0.5.0-beta.5] - 2026-10-16
 

@@ -166,21 +166,25 @@ class _Handler(BaseHTTPRequestHandler):
             self._json(404, {"ok": False})
 
     def do_POST(self) -> None:  # noqa: N802
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = 0
+        # Anfrage immer erst vollständig lesen: wer vorher antwortet und schließt, löst beim Absender
+        # (vor allem unter Windows) einen Verbindungsabbruch statt der Fehlermeldung aus
+        raw = self.rfile.read(length) if 0 < length <= MAX_BODY else b""
         if not self._token_ok():
             self._json(403, {"ok": False, "message": "Zugriff verweigert"})
             return
         if urlparse(self.path).path != "/api/cmd":
             self._json(404, {"ok": False})
             return
-        try:
-            length = int(self.headers.get("Content-Length") or 0)
-        except ValueError:
-            length = 0
         if length <= 0 or length > MAX_BODY:
+            self.close_connection = True
             self._json(400, {"ok": False, "message": "Ungültige Anfrage"})
             return
         try:
-            body = json.loads(self.rfile.read(length))
+            body = json.loads(raw)
             action = str(body["action"])
             args = body.get("args") or {}
             if not isinstance(args, dict):

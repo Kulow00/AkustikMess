@@ -20,7 +20,7 @@ def _rgba(cmap, values: np.ndarray, lo: float, hi: float) -> np.ndarray:
 
 
 def scene_data(room: rm.Room, speakers: list[rm.Speaker], planes: list[rm.Plane], maps: list[dict],
-               points: list[rm.MeasPoint]) -> dict:
+               points: list[rm.MeasPoint], coverage: bool = True) -> dict:
     """Linien, Lautsprecher, Flächen (mit Farbdaten) und Messpunkte als Arrays."""
     w, l0, l1, h = room.width, room.y_min, room.length, room.height
     c = [(0, l0, 0), (w, l0, 0), (w, l1, 0), (0, l1, 0), (0, l0, h), (w, l0, h), (w, l1, h), (0, l1, h)]
@@ -45,13 +45,40 @@ def scene_data(room: rm.Room, speakers: list[rm.Speaker], planes: list[rm.Plane]
     for p in planes:
         plane_edges.append(np.array([(p.x0, p.y0, p.z), (p.x1, p.y0, p.z), (p.x1, p.y0, p.z), (p.x1, p.y1, p.z),
                                      (p.x1, p.y1, p.z), (p.x0, p.y1, p.z), (p.x0, p.y1, p.z), (p.x0, p.y0, p.z)]))
+    cov = []
+    if coverage:
+        for sp in speakers:
+            if sp.enabled and sp.kind == "top":
+                c = rm.coverage_rays(room, sp, stop_z=room.listen_height)
+                cov.append({"name": sp.name, "pos": c["pos"], "axis": c["axis"], "edges": c["edges"],
+                            "corners": c["corners"], "cov": c["cov"], "vert": rm.vertical_coverage(room, sp)})
     return {"box": box, "stage": stage, "speakers": spk, "surfaces": surfaces, "points": pts,
-            "plane_edges": plane_edges, "center": (w / 2, (l0 + l1) / 2, h / 3), "size": max(w, l1 - l0, h)}
+            "plane_edges": plane_edges, "coverage": cov, "center": (w / 2, (l0 + l1) / 2, h / 2),
+            "size": max(w, l1 - l0, h), "dims": (w, l1 - l0, h)}
+
+
+def coverage_text(cov: list[dict]) -> str:
+    """Kurzfassung: wo die Tops die Hörhöhe treffen."""
+    lines = []
+    for c in cov:
+        v = c["vert"]
+        fmt = lambda d: f"{d:.1f} m" if d is not None else "– (darüber)"  # noqa: E731
+        lines.append(f"<b>{c['name']}</b> ({c['cov'][0]:.0f}° × {c['cov'][1]:.0f}°): Achse trifft Hörhöhe nach "
+                     f"{fmt(v['axis'])}, −6-dB-Bereich {fmt(v['near'])} bis {fmt(v['far'])}")
+    return "<br>".join(lines) or "Keine aktiven Tops."
+
+
+# Kamera-Vorgaben: (Name, Höhenwinkel, Azimut, Sichtfeld) – kleines Sichtfeld + große Entfernung ≈ Parallelprojektion
+VIEWS_3D = {"Perspektive": (32, 65, 60), "Seitenansicht": (0, 0, 6), "Draufsicht": (90, -90, 6),
+            "Von hinten (Publikum)": (8, 90, 40), "Von der Bühne": (12, -90, 40)}
 
 
 class Room3DView(QtWidgets.QWidget):
+    coverage_toggled = QtCore.Signal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._last: dict | None = None
         lay = QtWidgets.QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         self.view = None
@@ -62,9 +89,28 @@ class Room3DView(QtWidgets.QWidget):
             self.gl = gl
             self.view = gl.GLViewWidget()
             self.view.setBackgroundColor((15, 17, 20))
-            lay.addWidget(self.view)
+            lay.addWidget(self.view, 1)        # 3D-Bild bekommt den ganzen freien Platz
+            bar = QtWidgets.QHBoxLayout()
+            bar.addWidget(QtWidgets.QLabel("Ansicht:"))
+            for name in VIEWS_3D:
+                b = QtWidgets.QPushButton(name)
+                b.clicked.connect(lambda _=False, n=name: self.set_camera(n))
+                bar.addWidget(b)
+            self.chk_cov = QtWidgets.QCheckBox("Abstrahlung der Tops (−6 dB) zeigen")
+            self.chk_cov.setChecked(True)
+            self.chk_cov.toggled.connect(lambda _: self.coverage_toggled.emit())
+            bar.addWidget(self.chk_cov)
+            bar.addStretch(1)
+            lay.insertLayout(0, bar)
+            self.info = QtWidgets.QLabel()
+            self.info.setWordWrap(True)
+            self.info.setMaximumHeight(90)
+            self.info.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+            lay.addWidget(self.info)
             hint = QtWidgets.QLabel("Drehen: linke Maustaste · Zoomen: Mausrad · Verschieben: mittlere Maustaste "
-                                    "oder Strg + linke Maustaste")
+                                    "oder Strg + linke Maustaste. Seitenansicht: Blick quer durch den Raum – "
+                                    "zeigt, wie hoch die Tops strahlen und wo die −6-dB-Kanten die Hörhöhe treffen.")
+            hint.setWordWrap(True)
             hint.setStyleSheet("color: gray;")
             lay.addWidget(hint)
         except Exception as exc:  # noqa: BLE001 – kein OpenGL verfügbar
@@ -109,9 +155,41 @@ class Room3DView(QtWidgets.QWidget):
                                   color=(255, 255, 255, 255)))
         if len(data["points"]):
             add(gl.GLScatterPlotItem(pos=data["points"], color=(1, 1, 1, 1), size=9))
+        for c in data.get("coverage", []):
+            p0 = c["pos"]
+            add(gl.GLLinePlotItem(pos=np.array([p0, c["axis"]]), color=(1.0, 1.0, 1.0, 0.9), width=2))
+            seg = []
+            for e in c["edges"].values():
+                seg += [p0, e]
+            add(gl.GLLinePlotItem(pos=np.array(seg), mode="lines", color=(0.31, 0.76, 0.97, 0.9), width=1.5))
+            cn = c["corners"]
+            ring = [cn[0], cn[1], cn[1], cn[2], cn[2], cn[3], cn[3], cn[0]] + [x for k in cn for x in (p0, k)]
+            add(gl.GLLinePlotItem(pos=np.array(ring), mode="lines", color=(0.31, 0.76, 0.97, 0.35), width=1))
+            verts = np.array([p0, *cn])
+            faces = np.array([[0, 1, 2], [0, 2, 3], [0, 3, 4], [0, 4, 1]])
+            add(gl.GLMeshItem(vertexes=verts, faces=faces, color=(0.31, 0.76, 0.97, 0.10), smooth=False,
+                              drawEdges=False, glOptions="translucent"))
+        if hasattr(self, "info"):
+            self.info.setText(coverage_text(data.get("coverage", [])) if data.get("coverage") else "")
+        self._last = data
         if not self._camera_set:
-            cx, cy, cz = data["center"]
-            from pyqtgraph import Vector  # noqa: PLC0415
-            # Blick von hinten aus dem Publikum schräg auf die Bühne, ganzer Raum im Bild
-            v.setCameraPosition(pos=Vector(cx, cy, cz), distance=data["size"] * 2.3, elevation=32, azimuth=65)
+            self.set_camera("Perspektive")
             self._camera_set = True
+
+    def set_camera(self, name: str) -> None:
+        if not self.available or self._last is None:
+            return
+        from pyqtgraph import Vector  # noqa: PLC0415
+        elev, azim, fov = VIEWS_3D[name]
+        cx, cy, cz = self._last["center"]
+        size = self._last["size"]
+        w, depth, h = self._last.get("dims", (size, size, size))
+        # sichtbare Ausdehnung (waagrecht, senkrecht) je Ansicht – so wählen, dass beides ins Bild passt
+        ext = {"Seitenansicht": (depth, h), "Draufsicht": (w, depth), "Von hinten (Publikum)": (w, h * 1.6),
+               "Von der Bühne": (w, h * 1.6)}.get(name, (size * 1.3, size))
+        aspect = max(self.view.width(), 1) / max(self.view.height(), 1)
+        half = 0.58 * max(ext[0], ext[1] * aspect)                      # fov gilt waagrecht
+        dist = half / math.tan(math.radians(fov / 2))
+        self.view.opts["fov"] = fov
+        self.view.setCameraPosition(pos=Vector(cx, cy, cz), distance=dist, elevation=elev, azimuth=azim)
+        self.current_camera = name

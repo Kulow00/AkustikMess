@@ -347,3 +347,76 @@ def measured_band_level(trace: dict, band) -> float | None:
     if not sel.any():
         return None
     return float(10 * np.log10(power[sel].sum() + 1e-30))
+
+
+# --- Abdeckung (−6-dB-Kanten) für Seitenansicht und 3D ------------------------------------------
+
+def coverage_angles(sp: Speaker, f: float = 2000.0) -> tuple[float, float]:
+    """Volle Öffnungswinkel (−6 dB) horizontal/vertikal; aus Polardaten, falls vorhanden."""
+    if not sp.polar:
+        return float(sp.cov_h), float(sp.cov_v)
+    from .polar import _plane_att  # noqa: PLC0415
+    out = []
+    for plane in ("h", "v"):
+        angles = np.linspace(0, 180, 361)
+        att = _plane_att(sp.polar[plane], f, angles)
+        idx = np.flatnonzero(att <= -6.0)
+        out.append(2 * float(angles[idx[0]]) if idx.size else 360.0)
+    return out[0], out[1]
+
+
+def ray_dir(sp: Speaker, th_deg: float, tv_deg: float) -> np.ndarray:
+    """Richtung im Lautsprecher-Koordinatensystem (horizontal th, vertikal tv) → Raumvektor."""
+    a, r, u = axes(sp)
+    th, tv = math.radians(th_deg), math.radians(tv_deg)
+    d = math.cos(tv) * math.cos(th) * a + math.cos(tv) * math.sin(th) * r + math.sin(tv) * u
+    return d / np.linalg.norm(d)
+
+
+def ray_end(room: Room, pos, d, stop_z: float | None = None) -> np.ndarray:
+    """Wo ein Strahl ab ``pos`` in Richtung ``d`` auf eine Raumfläche oder die Hörhöhe ``stop_z`` trifft."""
+    lo = np.array([0.0, room.y_min, 0.0]) + 1e-4
+    hi = np.array([room.width, room.length, room.height]) - 1e-4
+    p = np.clip(np.asarray(pos, float), lo, hi)          # Lautsprecher an/auf einer Fläche: Strahl endet dort
+    bounds = ((0, 0.0), (0, room.width), (1, room.y_min), (1, room.length), (2, 0.0), (2, room.height))
+    best = math.inf
+    for axis, val in bounds:
+        if abs(d[axis]) > 1e-9:
+            t = (val - p[axis]) / d[axis]
+            if t > 1e-6:
+                best = min(best, t)
+    if stop_z is not None and d[2] < -1e-9 and p[2] > stop_z:
+        best = min(best, (stop_z - p[2]) / d[2])
+    if not math.isfinite(best):
+        best = 0.0
+    return p + best * d
+
+
+def coverage_rays(room: Room, sp: Speaker, stop_z: float | None = None) -> dict:
+    """Achse, vier Kantenstrahlen (links/rechts/oben/unten) und vier Eckstrahlen der −6-dB-Abdeckung."""
+    h, v = coverage_angles(sp)
+    hh, vv = min(h, 359.0) / 2, min(v, 179.0) / 2
+    pos = (sp.x, sp.y, sp.z)
+    end = lambda th, tv: ray_end(room, pos, ray_dir(sp, th, tv), stop_z)  # noqa: E731
+    return {"pos": np.array(pos, float), "axis": end(0, 0),
+            "edges": {"links": end(-hh, 0), "rechts": end(hh, 0), "oben": end(0, vv), "unten": end(0, -vv)},
+            "corners": [end(-hh, vv), end(hh, vv), end(hh, -vv), end(-hh, -vv)], "cov": (h, v)}
+
+
+def vertical_coverage(room: Room, sp: Speaker, z: float | None = None) -> dict:
+    """Wo Achse und obere/untere −6-dB-Kante die Hörhöhe treffen (horizontaler Abstand vom Lautsprecher in m).
+
+    ``None`` = trifft die Hörhöhe nicht (strahlt darüber hinweg bis an eine Wand).
+    """
+    z = room.listen_height if z is None else z
+    _, v = coverage_angles(sp)
+    dz = sp.z - z
+    out = {"cov_v": v}
+    for name, ang in (("axis", sp.tilt), ("near", sp.tilt - v / 2), ("far", sp.tilt + v / 2)):
+        if ang < -0.01 and dz > 0:
+            out[name] = round(dz / math.tan(math.radians(-ang)), 2)
+        elif dz <= 0 and ang > 0.01:
+            out[name] = round(-dz / math.tan(math.radians(ang)), 2)
+        else:
+            out[name] = None
+    return out

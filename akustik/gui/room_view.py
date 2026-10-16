@@ -149,6 +149,12 @@ class RoomView(QtWidgets.QWidget):
         self.plot.addItem(self.pts_item)
         self.spk_items: list = []
         self.pt_labels: list = []
+        self.paused = QtWidgets.QLabel(self.plot)
+        self.paused.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
+        self.paused.setStyleSheet("background: rgba(60,45,10,225); color: #ffcc66; padding: 6px 10px; "
+                                  "border: 1px solid #b8860b; border-radius: 4px; font-weight: bold;")
+        self.paused.move(70, 10)
+        self.paused.hide()
         self.hover = QtWidgets.QLabel(self.plot)
         self.hover.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents)
         self.hover.setStyleSheet("background: rgba(20,22,26,230); color: #fff; padding: 3px 6px; border-radius: 3px;")
@@ -159,6 +165,7 @@ class RoomView(QtWidgets.QWidget):
         self.view3d = Room3DView()
         self.view_tabs.addTab(self.view3d, "3D")
         self.view_tabs.currentChanged.connect(lambda _: self._update_3d())
+        self.view3d.coverage_toggled.connect(self._update_3d)
         left.addWidget(self.view_tabs)
 
         box = QtWidgets.QWidget()
@@ -199,6 +206,14 @@ class RoomView(QtWidgets.QWidget):
                                          suffix=suffix)
             s.setKeyboardTracking(False)
             return s
+
+        # Berechnung ein/aus (Standard: aus – Lautsprecher in Ruhe anlegen und bearbeiten)
+        self.btn_calc = QtWidgets.QPushButton()
+        self.btn_calc.setCheckable(True)
+        self.btn_calc.setMinimumHeight(46)
+        self.btn_calc.toggled.connect(self._calc_toggled)
+        pl.addWidget(self.btn_calc)
+        self._style_calc_button()
 
         # Darstellung
         g = QtWidgets.QGroupBox("Darstellung")
@@ -492,7 +507,8 @@ class RoomView(QtWidgets.QWidget):
         self.schedule()
 
     def _anim_toggled(self, on: bool) -> None:
-        if on and self.view_kind.startswith("wave") and self.isVisible():
+        if on and self.view_kind.startswith("wave") and self.isVisible() and self.result is not None \
+                and self.result["kind"].startswith("wave"):
             self._anim.start()
         else:
             self._anim.stop()
@@ -663,20 +679,65 @@ class RoomView(QtWidgets.QWidget):
         self.schedule()
 
     # --- Rechnen ---------------------------------------------------------------------
+    @property
+    def calc_on(self) -> bool:
+        return hasattr(self, "btn_calc") and self.btn_calc.isChecked()
+
+    def _style_calc_button(self) -> None:
+        if self.calc_on:
+            self.btn_calc.setText("●  Berechnung EIN  –  zum Pausieren klicken")
+            self.btn_calc.setStyleSheet("QPushButton { background: #2e7d32; color: white; font-weight: bold; "
+                                        "font-size: 14px; border-radius: 6px; }")
+        else:
+            self.btn_calc.setText("▶  Berechnung starten")
+            self.btn_calc.setStyleSheet("QPushButton { background: #ef6c00; color: white; font-weight: bold; "
+                                        "font-size: 14px; border-radius: 6px; }")
+        self.btn_calc.setToolTip("Aus: Raum und Lautsprecher in Ruhe bearbeiten, es wird nichts gerechnet. "
+                                 "Ein: Karte wird nach jeder Änderung neu berechnet.")
+
+    def _calc_toggled(self, on: bool) -> None:
+        self._style_calc_button()
+        if on:
+            self._dirty = False
+            self._recalc.start()
+        else:
+            self._recalc.stop()
+            self._job += 1                 # laufende Berechnung verwerfen
+            self._anim.stop()
+        self._update_paused()
+
+    def _update_paused(self) -> None:
+        stale = not self.calc_on and (self.result is None or getattr(self, "_dirty", False))
+        if not self.calc_on:
+            self.paused.setText("Berechnung aus – Änderungen werden nicht berechnet. "
+                                "Zum Berechnen rechts „Berechnung starten“ klicken."
+                                if stale else "Berechnung aus")
+            self.paused.adjustSize()
+            self.paused.show()
+            self.paused.raise_()
+        else:
+            self.paused.hide()
+        self.img.setOpacity(0.3 if stale and self.result is not None else 1.0)
+
     def schedule(self) -> None:
-        """Neu rechnen – aber nur, wenn der Raum-Modus sichtbar ist (spart Rechenzeit beim Messen)."""
+        """Neu rechnen – nur wenn die Berechnung eingeschaltet und der Raum-Modus sichtbar ist."""
         if not hasattr(self, "_recalc"):
             return
-        if not self.isVisible():
+        if not self.calc_on or not self.isVisible():
             self._dirty = True
+            if hasattr(self, "paused"):
+                self._draw_room()             # Geometrie sofort zeigen, Karte bleibt beim letzten Stand
+                self._update_paused()
+                self._update_3d()
             return
         self._recalc.start()
 
     def showEvent(self, event) -> None:  # noqa: N802
         super().showEvent(event)
-        if getattr(self, "_dirty", True):
+        if self.calc_on and getattr(self, "_dirty", True):
             self._dirty = False
             self._recalc.start()
+        self._update_paused()
 
     def hideEvent(self, event) -> None:  # noqa: N802
         super().hideEvent(event)
@@ -728,9 +789,11 @@ class RoomView(QtWidgets.QWidget):
             return
         self.result = result
         self.map = (result["xs"], result["ys"], result["data"])
+        self._dirty = False
         self._phase = 0.0
         self._redraw_map()
         self._update_3d()
+        self._update_paused()
         self._anim_toggled(self.chk_anim.isChecked())
 
     # --- Zeichnen ---------------------------------------------------------------
@@ -784,6 +847,20 @@ class RoomView(QtWidgets.QWidget):
                 t.sigPositionChangeFinished.connect(lambda item, i=i: self._speaker_moved(i, item))
             self.plot.addItem(t)
             self.spk_items.append(t)
+            if section and sp.kind == "top" and sp.enabled:
+                c = rm.coverage_rays(self.room, sp, stop_z=self.room.listen_height)
+                for key, style in (("oben", QtCore.Qt.DashLine), ("unten", QtCore.Qt.DashLine)):
+                    e = c["edges"][key]
+                    ln = pg.PlotDataItem([sp.y, e[1]], [sp.z, e[2]], pen=pg.mkPen(color, width=1.5, style=style))
+                    ln.setZValue(28)
+                    self.plot.addItem(ln)
+                    self.spk_items.append(ln)
+                ax = c["axis"]
+                ln = pg.PlotDataItem([sp.y, ax[1]], [sp.z, ax[2]], pen=pg.mkPen("#ffffff", width=1.5))
+                ln.setZValue(28)
+                self.plot.addItem(ln)
+                self.spk_items.append(ln)
+                continue
             if sp.kind == "top" or sp.cov_h < 360:
                 a, tl = math.radians(sp.azimuth), math.radians(sp.tilt)
                 if section:
@@ -873,13 +950,14 @@ class RoomView(QtWidgets.QWidget):
         self.img.setImage(ra.wave_frame(self.result["field"], self._phase), autoLevels=False, levels=(-1, 1))
 
     def _update_3d(self) -> None:
-        if self.view_tabs.currentWidget() is not self.view3d or not self.view3d.available or self.result is None:
-            if self.view_tabs.currentWidget() is self.view3d and self.result is not None and "extra" not in self.result \
-                    and self.result["kind"] in ("level", "sti"):
-                self.schedule()   # 3D braucht alle Hörflächen
+        if not hasattr(self, "view3d") or self.view_tabs.currentWidget() is not self.view3d \
+                or not self.view3d.available:
             return
         maps = []
-        kind = self.result["kind"]
+        fresh = self.result is not None and not (not self.calc_on and getattr(self, "_dirty", False))
+        if fresh and "extra" not in self.result and self.result["kind"] in ("level", "sti") and self.calc_on:
+            self._recalc.start()   # 3D braucht die Karten aller Hörflächen
+        kind = self.result["kind"] if fresh else None
         if kind in ("level", "sti"):
             entries = [(self.plane, self.result)] + list(self.result.get("extra", []))
             if kind == "level":
@@ -892,7 +970,9 @@ class RoomView(QtWidgets.QWidget):
                 d = res["data"] + (self.sp_offset.value() if kind == "level" else 0)
                 maps.append({"xs": res["xs"], "ys": res["ys"], "z": self.room.listen_height if p is None else p.z,
                              "rgba": _rgba(cmap, d, lo, hi)})
-        self.view3d.show_scene(scene_data(self.room, self.speakers, self.planes, maps, self.points))
+        self.view3d.show_scene(scene_data(self.room, self.speakers, self.planes, maps, self.points,
+                                          coverage=getattr(self.view3d, "chk_cov", None) is None
+                                          or self.view3d.chk_cov.isChecked()))
 
     # --- Messpunkte ---------------------------------------------------------------------
     def _place_toggled(self, on: bool) -> None:

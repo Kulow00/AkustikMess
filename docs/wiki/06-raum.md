@@ -5,6 +5,14 @@ je Frequenzband oder breitbandig A-bewertet. Ähnlich wie bei Planungsprogrammen
 Laufzeit, Delay, Polarität und Frequenzweiche **phasenrichtig** addiert. So sieht man Abdeckung, Interferenzen
 (z. B. die „Power-Alley“ zwischen zwei Sub-Stacks) und die Wirkung von Sub-Arrays.
 
+## Berechnung ein- und ausschalten
+
+Oben in der Seitenleiste steht der große Schalter **▶ Berechnung starten** (orange). Er ist beim Start **aus**:
+Raum, Lautsprecher und Messpunkte lassen sich in Ruhe anlegen und bearbeiten, ohne dass nach jeder Änderung neu
+gerechnet wird. Die Lautsprecher-Positionen und die 3D-Geometrie sind trotzdem sofort aktuell; eine alte Karte wird
+abgeblendet. Ein Klick schaltet die Berechnung ein (grün) – dann wird nach jeder Änderung automatisch neu
+gerechnet, bis man wieder pausiert.
+
 ## Raum anlegen
 
 In der Seitenleiste unter **Raum**: Länge (Tiefe ab Bühnenkante), Breite, Höhe, **Hörhöhe** (sitzend ≈ 1,2 m,
@@ -72,6 +80,20 @@ Oben in der Seitenleiste unter **Darstellung → Ansicht**:
 
 Die Karte und der Tab **3D** (drehen mit der linken Maustaste, zoomen mit dem Mausrad) zeigen Raum, Bühne,
 Lautsprecher mit Ausrichtung, Messpunkte und alle Hörflächen mit ihrer Pegel- bzw. STI-Karte.
+
+### 3D-Ansicht und Seitenansicht
+
+Im Tab **3D** stehen oben feste Blickwinkel: **Perspektive**, **Seitenansicht**, **Draufsicht**, **Von hinten
+(Publikum)** und **Von der Bühne**. Seiten- und Draufsicht sind nahezu verzerrungsfrei (wie eine Planzeichnung).
+
+Mit **Abstrahlung der Tops (−6 dB) zeigen** wird für jeden Top die Achse (weiß) und die −6-dB-Abdeckung
+(blaue Kanten, durchscheinender Kegel) bis zur Hörhöhe bzw. bis zur nächsten Wand gezeichnet. In der
+**Seitenansicht** sieht man so direkt, wie hoch die Tops strahlen und ab wo bzw. bis wohin z. B. ein Top mit 70°
+vertikal das Publikum abdeckt. Unter dem Bild steht für jeden Top: wo die Achse die Hörhöhe trifft und von wo bis
+wo der −6-dB-Bereich reicht („darüber“ = die obere Kante strahlt über die Hörfläche hinweg). Der Öffnungswinkel
+stammt aus der Tabelle oder – bei importierten Polardaten – aus der gemessenen Abstrahlung bei 2 kHz.
+
+Auch der 2D-**Längsschnitt** zeigt Achse und obere/untere Kante der Tops.
 
 ## Raumakustik
 
