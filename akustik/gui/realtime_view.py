@@ -388,7 +388,7 @@ class RealtimeView(QtWidgets.QWidget):
         if eng is None:
             return
         n = int(eng.fs * 2)
-        buf = eng.ring.latest(n).astype(float)
+        buf = eng.ring.latest(n).astype(float)  # Laufzeitsuche: selten, beide Kanäle
         ref, meas = buf[:, self.cb_ref.currentData()], buf[:, self.cb_meas.currentData()]
         if np.std(ref) < 1e-6:
             self.status.setText("Referenzsignal ist stumm – Generator einschalten?")
@@ -433,7 +433,7 @@ class RealtimeView(QtWidgets.QWidget):
         ch = self.cb_spec_ch.currentData() or 0
         if ch >= eng.ring.channels:
             return
-        x = eng.ring.latest(self.spec.fft_size)[:, ch]
+        x = eng.ring.latest(self.spec.fft_size, ch)
         power = self.spec.update(x)
         cal = self.state.calibration_for(ch)
         x_axis, lv, stepped = self._spectrum_db(self.spec.freqs, power, cal)
@@ -475,13 +475,19 @@ class RealtimeView(QtWidgets.QWidget):
             return
         n = self.tf.length
         d = int(round(self.sp_delay.value() * 1e-3 * eng.fs))
-        buf = eng.ring.latest(n + d).astype(float)
-        ref, meas = buf[:n, ref_ch], buf[d:d + n, meas_ch]
-        if np.std(ref) < 1e-7:
+        if np.std(eng.ring.latest(4096, ref_ch)) < 1e-7:
             self.status.setText("Referenz stumm – für die Übertragungsfunktion den Generator "
                                 "einschalten oder ein Musiksignal anlegen.")
             return
-        res = self.tf.update(ref, meas, SMOOTHING[self.cb_smooth.currentText()])
+        smoothing = SMOOTHING[self.cb_smooth.currentText()]
+        if isinstance(self.tf, MultiWindowTransferFunction):
+            res = self.tf.update_stream(eng.ring, ref_ch, meas_ch, d, smoothing)   # nur neue Abschnitte
+            if res is None:
+                return
+        else:
+            buf = eng.ring.latest(n + d, (ref_ch, meas_ch))   # ein Zugriff: beide Kanäle zeitgleich
+            ref, meas = buf[:n, 0], buf[d:d + n, 1]
+            res = self.tf.update(ref, meas, smoothing)
         keep = res.freqs > 0  # Gleichanteil weglassen (log. Achse)
         f = res.freqs[keep]
         mag, phase, coh = res.magnitude_db[keep], res.phase_deg[keep], res.coherence[keep]

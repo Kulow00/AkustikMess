@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
-from scipy import signal
+from .._lazy import signal
 
 F1, F2, F3, F4 = 20.598997, 107.65265, 737.86223, 12194.217
 A1000 = 1.9997

@@ -89,7 +89,7 @@ class CalibrationDialog(QtWidgets.QDialog):
         self.lbl.setText("Messe …")
         QtWidgets.QApplication.processEvents()
         QtCore.QThread.msleep(3000)
-        x = eng.ring.latest(int(eng.fs * 3))[:, self.channel].astype(float)
+        x = eng.ring.latest(int(eng.fs * 3), self.channel).astype(float)
         if np.sqrt(np.mean(x**2)) < 1e-5:
             self.lbl.setText("Kein Signal – Kalibrator eingeschaltet? Eingangsverstärkung?")
             return
@@ -288,7 +288,8 @@ class SPLView(QtWidgets.QWidget):
         cal = self.state.calibration_for(ch)
         self.cal_warning.setText("" if cal is not None else
                                  "Nicht kalibriert – Werte in dBFS (re. Vollaussteuerung)")
-        self.meter = SPLMeter(self.state.fs, cal if cal is not None else 0.0)
+        # Bewertungsfilter erst bei laufendem Audio entwerfen (lädt scipy – nicht schon beim Programmstart)
+        self.meter = SPLMeter(self.state.fs, cal if cal is not None else 0.0) if self.state.engine else None
         self.pos = self.state.engine.ring.total if self.state.engine else 0
         self.sec_energy = {"A": 0.0, "C": 0.0}
         self.sec_samples = 0

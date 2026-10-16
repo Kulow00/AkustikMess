@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
-from scipy import signal
+from .._lazy import signal
 
 
 def exp_sweep(f1: float, f2: float, duration: float, fs: float, fade: float = 0.02) -> np.ndarray:

@@ -89,3 +89,17 @@ def test_roundtrip_and_measured_band():
     edges = np.array([707.0, 1414.0, 2828.0])
     trace = {"freqs": edges, "mag": np.array([90.0, 80.0]), "stepped": True}
     assert rm.measured_band_level(trace, 1000) == pytest.approx(90.0, abs=0.01)
+
+
+def test_fast_band_pressure_matches_exact():
+    from akustik.dsp import roomacoustics as ra
+    room = rm.Room(reflections=True)
+    sp = [rm.Speaker.top("L", x=2, y=0.5, z=3, azimuth=15, delay_ms=1.3)] + rm.sub_setup("Cardioid (Gradient)", room)
+    src = ra.active_sources(room, sp)
+    X, Y = np.meshgrid(np.linspace(0, 14, 15), np.linspace(-5, 20, 20))
+    Z = np.full_like(X, 1.2)
+    geo = rm.geometry(src, X, Y, Z)
+    for band in (63, 250, 4000):
+        f = rm._band_freqs(band, 1)
+        exact = 10 * np.log10(sum(np.abs(rm.pressure(src, fk, geo=geo)) ** 2 for fk in f) / len(f))
+        assert np.max(np.abs(exact - rm.band_level(src, band, X, Y, Z, 1, geo))) < 0.02

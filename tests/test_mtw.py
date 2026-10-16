@@ -67,3 +67,29 @@ def test_mtw_is_fast():
     for _ in range(10):
         tf.update(x, x, smoothing=24)
     assert (time.perf_counter() - t0) / 10 < 0.015
+
+
+def test_streaming_mtw_matches_full_update():
+    """Inkrementelle MTW (nur neue Abschnitte) liefert dasselbe wie die vollständige Neuberechnung."""
+    from scipy import signal
+
+    from akustik.audio.engine import RingBuffer
+    fs = 48000
+    rng = np.random.default_rng(3)
+    x = rng.standard_normal(fs * 3).astype(np.float32)
+    sos = signal.butter(2, [200, 4000], "bandpass", fs=fs, output="sos")
+    y = np.concatenate([np.zeros(100), signal.sosfilt(sos, x)[:-100] * 0.5]).astype(np.float32)
+    ring = RingBuffer(2, fs * 10)
+    full, stream = MultiWindowTransferFunction(fs), MultiWindowTransferFunction(fs)
+    res = None
+    for pos in range(0, len(x) - 2400, 2400):
+        ring.write(np.column_stack([y[pos:pos + 2400], x[pos:pos + 2400]]))
+        res = stream.update_stream(ring, 1, 0, 100) or res
+    buf = ring.latest(32768 + 100).astype(float)
+    for _ in range(8):
+        ref = full.update(buf[:32768, 1], buf[100:, 0])
+    band = (ref.freqs > 300) & (ref.freqs < 3000)
+    assert np.max(np.abs(ref.magnitude_db[band] - res.magnitude_db[band])) < 0.2
+    assert res.coherence[band].min() > 0.99
+    # Kanalwechsel oder neue Verzögerung → sauber neu beginnen
+    assert stream.update_stream(ring, 0, 1, 0) is not None

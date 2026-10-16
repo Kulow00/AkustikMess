@@ -7,7 +7,7 @@ Konvention: ``cal_db`` ist der Schalldruckpegel, der einem Effektivwert von 1.0
 from __future__ import annotations
 
 import numpy as np
-from scipy import signal
+from .._lazy import signal
 
 from .weighting import CURVES, weighting_sos
 

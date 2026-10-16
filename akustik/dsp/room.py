@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 import numpy as np
-from scipy import signal
+from .._lazy import signal
 
 from .impulse import ir_start
 from .octave import band_filter_sos, band_label

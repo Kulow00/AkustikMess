@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
-from scipy import signal
+from .._lazy import signal
 
 # Paul-Kellet-ähnliches rosa Filter (−3 dB/Oktave, ±0.5 dB von 10 Hz bis 20 kHz @ 48 kHz)
 _PINK_B = [0.049922035, -0.095993537, 0.050612699, -0.004408786]

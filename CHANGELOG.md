@@ -20,6 +20,14 @@ Veröffentlichen den Abschnitt der neuen Version und übernimmt ihn als Patch No
 - Raum: Schalter „Berechnung starten“ – gerechnet wird erst nach Klick, Lautsprecher lassen sich in Ruhe bearbeiten
 - Raum: 3D mit Seitenansicht, Draufsicht und weiteren Blickwinkeln; Abstrahlung der Tops (Achse und −6-dB-Kanten) mit Angabe, wo sie die Hörhöhe treffen
 
+### Schneller und sparsamer
+- Programmstart deutlich schneller: große Bibliotheken werden erst im Hintergrund bzw. bei Bedarf geladen
+- Speicherbedarf beim Start von über 900 MB (reserviert) auf unter 100 MB
+- Übertragungsfunktion (MTW) rechnet nur noch neue Abschnitte: rund 3× weniger Rechenzeit je Bild
+- Raum-Modus rechnet Pegel- und STI-Karten etwa 2× schneller
+- Interfaces mit vielen Eingängen: Es werden nur noch die benötigten Kanäle gelesen; Aufnahmepuffer halbiert
+- Installer kleiner (nicht benötigte Qt-Teile entfernt); jedes gebaute Programm wird vor der Veröffentlichung automatisch getestet
+
 ### Behoben
 - Fernbedienung: Bei falschem Zugangsschlüssel kam teilweise ein Verbindungsabbruch statt der Meldung „Zugriff verweigert“
 

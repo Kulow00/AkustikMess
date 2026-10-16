@@ -163,8 +163,14 @@ def air_db_per_m(f: float) -> float:
 
 
 def _band_freqs(fc: float, fraction: int) -> np.ndarray:
+    """Stützfrequenzen im Band, **gleichabständig** (Mitten von n gleich breiten Teilbändern).
+
+    Gleiche Abstände erlauben die schnelle Phasenrechnung in ``band_level`` (Multiplikation statt
+    komplexer Exponentialfunktion je Frequenz).
+    """
     n = 7 if fraction == 1 else 3
-    return fc * 2 ** (np.linspace(-0.5, 0.5, n + 2)[1:-1] / fraction)
+    lo, hi = fc * 2 ** (-0.5 / fraction), fc * 2 ** (0.5 / fraction)
+    return lo + (np.arange(n) + 0.5) * (hi - lo) / n
 
 
 def _band_norm(sp: Speaker) -> float:
@@ -213,12 +219,45 @@ def band_level(speakers, band, px, py, pz, fraction: int = 1, geo=None) -> np.nd
         for fc in OCTAVES:
             e = e + 10 ** ((band_level(speakers, fc, px, py, pz, 1, geo) + float(weighting_db(fc, "A"))) / 10)
         return 10 * np.log10(e + 1e-30)
-    e = 0.0
     freqs = _band_freqs(float(band), fraction)
-    for f in freqs:
-        e = e + np.abs(pressure(speakers, f, geo=geo)) ** 2
+    p = band_pressures(geo, freqs, float(band))
+    e = np.sum(p.real ** 2 + p.imag ** 2, axis=0, dtype=np.float64)
     # Leistung des Bandes: Mittel über die Stützfrequenzen × Bandanteil (1/n der Oktave)
     return 10 * np.log10(e / len(freqs) / (1 if fraction == 1 else fraction) + 1e-30)
+
+
+def band_pressures(geo: list, freqs: np.ndarray, fc: float) -> np.ndarray:
+    """Komplexer Schalldruck aller Quellen bei gleichabständigen Frequenzen ``freqs`` (Form [n, Punkte]).
+
+    Schnell: Betrag (Abstrahlung, Luftdämpfung) je Quelle einmal bei der Bandmitte; die Phase
+    exp(−j·2πf·(r/c + τ)) für f₀, f₀+Δf, … durch fortgesetzte Multiplikation mit exp(−j·2πΔf·(r/c + τ)).
+    Rechnet in einfacher Genauigkeit (reicht für Pegel auf 0,01 dB).
+    """
+    n = len(freqs)
+    df = float(freqs[1] - freqs[0]) if n > 1 else 0.0
+    out = None
+    ln10_20 = np.float32(math.log(10) / 20)
+    for sp, r, ang, norm in geo:
+        h = response(sp, freqs) * sp.polarity
+        r32 = r.astype(np.float32)
+        t = (r / C + sp.delay_ms * 1e-3).astype(np.float32)
+        ph = np.exp((-2j * np.pi * float(freqs[0])) * t).astype(np.complex64)
+        step = np.exp((-2j * np.pi * df) * t).astype(np.complex64) if n > 1 else None
+        if out is None:
+            out = np.zeros((n,) + np.shape(r), np.complex64)
+        base = sp.level + norm
+        omni = sp.kind == "sub" and sp.cov_h >= 360 and sp.cov_v >= 360 and not sp.polar
+        att = None
+        for k, f in enumerate(freqs):
+            # Betrag je Frequenz (Abstrahlung wird unter 800 Hz breiter, Luftdämpfung steigt mit f) –
+            # reelle Exponentialfunktion, deutlich billiger als die komplexe Phase
+            if att is None or not omni:
+                att = directivity_db(sp, float(f), ang=ang).astype(np.float32)
+            amp = np.exp(((base + att) - np.float32(air_db_per_m(float(f))) * r32) * ln10_20) / r32
+            out[k] += np.complex64(h[k]) * ph * amp
+            if step is not None and k + 1 < n:
+                ph *= step
+    return out
 
 
 def plane_grid(plane: Plane, resolution: float) -> tuple[np.ndarray, np.ndarray]:

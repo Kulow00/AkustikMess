@@ -88,7 +88,7 @@ class TuningDialog(QtWidgets.QDialog):
             self.lbl_result.setText("Audio ist nicht gestartet.")
             return
         ch = self.cb_ch.currentData() or 0
-        x = eng.ring.latest(FFT_SIZE)[:, ch].astype(float)
+        x = eng.ring.latest(FFT_SIZE, ch).astype(float)
         if np.sqrt(np.mean(x**2)) < 1e-4:
             self.lbl_result.setText("Kein ausreichendes Signal am Eingang.")
             return

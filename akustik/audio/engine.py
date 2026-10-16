@@ -12,7 +12,7 @@ import time
 from dataclasses import dataclass
 
 import numpy as np
-from scipy import signal
+from .._lazy import signal
 
 from ..dsp.generator import Generator
 
@@ -52,27 +52,35 @@ class RingBuffer:
                 self.buf[: n - first] = block[first:]
             self.total += n
 
-    def _read(self, start: int, end: int) -> np.ndarray:
+    def _read(self, start: int, end: int, ch=None) -> np.ndarray:
+        """Samples [start, end); ``ch`` = Kanalindex (liefert 1-D) oder None (alle Kanäle).
+
+        Nur den gewünschten Kanal zu kopieren spart bei Interfaces mit vielen Eingängen viel
+        Speicherbandbreite (z. B. 18 Kanäle: 1/18 der Daten je Bild).
+        """
         n = end - start
         i = start % self.size
         first = min(n, self.size - i)
-        out = np.empty((n, self.channels), dtype=np.float32)
-        out[:first] = self.buf[i:i + first]
+        cols = slice(None) if ch is None else (list(ch) if isinstance(ch, (tuple, list)) else ch)
+        width = () if isinstance(cols, int) else ((self.channels,) if ch is None else (len(cols),))
+        out = np.empty((n,) + width, dtype=np.float32)
+        out[:first] = self.buf[i:i + first][:, cols]       # erst Zeilen, dann Spalten: kopiert nur das Nötige
         if first < n:
-            out[first:] = self.buf[: n - first]
+            out[first:] = self.buf[: n - first][:, cols]
         return out
 
-    def latest(self, n: int) -> np.ndarray:
+    def latest(self, n: int, ch=None) -> np.ndarray:
         with self.lock:
             n = min(n, self.size)
             end = self.total
             start = end - n
             if start < 0:
-                out = np.zeros((n, self.channels), dtype=np.float32)
+                shape = (n,) if isinstance(ch, int) else (n, self.channels if ch is None else len(ch))
+                out = np.zeros(shape, dtype=np.float32)
                 if end:
-                    out[-end:] = self._read(0, end)
+                    out[-end:] = self._read(0, end, ch)
                 return out
-            return self._read(start, end)
+            return self._read(start, end, ch)
 
     def since(self, pos: int) -> tuple[np.ndarray, int]:
         """Alle neuen Samples seit ``pos`` (für lückenlose Verarbeitung)."""
@@ -81,11 +89,11 @@ class RingBuffer:
             start = max(pos, end - self.size)
             return self._read(start, end), end
 
-    def range(self, start: int, end: int) -> np.ndarray | None:
+    def range(self, start: int, end: int, ch=None) -> np.ndarray | None:
         with self.lock:
-            if start < self.total - self.size or end > self.total:
+            if start < self.total - self.size or end > self.total or start < 0:
                 return None
-            return self._read(start, end)
+            return self._read(start, end, ch)
 
 
 class _OneShot:
@@ -97,7 +105,9 @@ class _OneShot:
 
 
 class BaseEngine:
-    BUFFER_SECONDS = 60
+    # längste Aufnahme: Sweep 10 s + Ausklingen 15 s = 25 s → 30 s reichen (halbiert den Speicher;
+    # bei 18 Eingängen und 48 kHz ≈ 104 MB statt 207 MB)
+    BUFFER_SECONDS = 30
 
     def __init__(self, config: AudioConfig):
         self.config = config

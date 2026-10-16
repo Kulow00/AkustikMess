@@ -56,6 +56,15 @@ jobs:
       - name: Programm bauen
         run: python tools/release.py build --stage app --skip-tests
 
+      - name: Selbsttest des gebauten Programms
+        shell: bash
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          out="$RUNNER_TEMP/selbsttest.txt"
+          AKUSTIKMESS_SELFTEST="$out" dist/AkustikMess/AkustikMess.exe || { cat "$out"; exit 1; }
+          cat "$out"
+
       - name: Programmdatei für SignPath bereitstellen
         id: app-unsigned
         if: env.SIGNING == 'true'
@@ -141,6 +150,14 @@ jobs:
 
       - name: Installer bauen
         run: python tools/release.py build --skip-tests
+
+      - name: Selbsttest des gebauten Programms
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          out="$RUNNER_TEMP/selbsttest.txt"
+          AKUSTIKMESS_SELFTEST="$out" dist/AkustikMess.app/Contents/MacOS/AkustikMess || { cat "$out"; exit 1; }
+          cat "$out"
 
       - name: An das GitHub-Release hängen
         env:

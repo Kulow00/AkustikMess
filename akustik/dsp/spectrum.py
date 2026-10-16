@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
-from scipy.signal import get_window
+from .._lazy import signal
 
 from .octave import G
 
@@ -17,7 +17,7 @@ WINDOWS = {
 
 
 def make_window(name: str, n: int) -> np.ndarray:
-    return get_window(WINDOWS.get(name, "hann"), n, fftbins=True)
+    return signal.get_window(WINDOWS.get(name, "hann"), n, fftbins=True)
 
 
 def power_spectrum(x: np.ndarray, window: np.ndarray) -> np.ndarray:

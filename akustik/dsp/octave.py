@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
-from scipy import signal
+from .._lazy import signal
 
 G = 10 ** (3 / 10)  # Oktavverhältnis Basis 10
 

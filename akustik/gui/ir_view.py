@@ -8,8 +8,8 @@ import time
 import numpy as np
 import pyqtgraph as pg
 from PySide6 import QtCore, QtWidgets
-from scipy import signal
-from scipy.io import wavfile
+from .._lazy import signal
+from .._lazy import wavfile
 
 from ..dsp import impulse, room, sti
 from ..dsp.octave import band_filter_sos

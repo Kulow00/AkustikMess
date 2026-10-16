@@ -227,16 +227,28 @@ def curve_value(freqs: np.ndarray | None, values: np.ndarray | None, f: float,
 GRID_PEN = (62, 66, 74)
 
 
-def add_static_grid(w: pg.PlotWidget, y_step: float, y_span=(-300, 300)) -> None:
-    """Gitter aus festen Linien. Etwa doppelt so schnell gezeichnet wie
-    ``showGrid`` (das bei jeder Aktualisierung über die ganze Fläche neu malt)."""
-    pen = pg.mkPen(GRID_PEN)
-    lines = [(np.log10(f), 90) for f in FREQ_MAJOR]
-    lines += [(y, 0) for y in np.arange(y_span[0], y_span[1] + y_step / 2, y_step)]
-    for pos, angle in lines:
-        line = pg.InfiniteLine(pos=pos, angle=angle, pen=pen, movable=False)
-        line.setZValue(-100)
-        w.addItem(line, ignoreBounds=True)
+GRID_X_SPAN = (np.log10(5), np.log10(48000))   # entspricht den Zoom-Grenzen der Frequenzachse
+
+
+def add_static_grid(w: pg.PlotWidget, y_step: float, y_span=(-300, 300)) -> pg.PlotCurveItem:
+    """Gitter als **ein** Linienobjekt (Segmentpaare) statt hunderter Einzellinien.
+
+    Schneller aufgebaut und gezeichnet als ``showGrid`` (malt bei jeder Aktualisierung die ganze Fläche)
+    und als einzelne ``InfiniteLine``-Objekte (je Linie ein eigenes Zeichenobjekt).
+    """
+    xs = [np.log10(f) for f in FREQ_MAJOR]
+    ys = np.arange(y_span[0], y_span[1] + y_step / 2, y_step)
+    px, py = [], []
+    for x in xs:
+        px += [x, x]
+        py += [y_span[0], y_span[1]]
+    for y in ys:
+        px += [GRID_X_SPAN[0], GRID_X_SPAN[1]]
+        py += [y, y]
+    grid = pg.PlotCurveItem(np.array(px), np.array(py), pen=pg.mkPen(GRID_PEN), connect="pairs")
+    grid.setZValue(-100)
+    w.addItem(grid, ignoreBounds=True)
+    return grid
 
 
 def freq_plot(title: str = "", y_label: str = "dB", y_range=(-100, 0),

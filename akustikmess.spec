@@ -29,8 +29,29 @@ a = Analysis(
     pathex=["."],
     hiddenimports=["pyqtgraph.exporters"],
     datas=[],
-    excludes=["tkinter", "matplotlib", "pytest"],
+    excludes=["tkinter", "matplotlib", "pytest", "PySide6.QtQml", "PySide6.QtQuick", "PySide6.QtQuickWidgets",
+              "PySide6.QtNetwork", "PySide6.QtTest", "PySide6.QtPdf", "PySide6.QtPdfWidgets",
+              "PySide6.QtVirtualKeyboard", "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets"],
 )
+
+# Nicht benötigte Qt-Teile entfernen (Qt Quick/QML, virtuelle Tastatur, PDF, Netzwerk, Test) und nur deutsche
+# und englische Übersetzungen behalten – spart rund 25 MB. opengl32sw.dll bleibt: Software-OpenGL für die
+# 3D-Ansicht auf Rechnern ohne passende Grafiktreiber.
+_DROP = ("Qt6Qml", "Qt6Quick", "Qt6Pdf", "Qt6VirtualKeyboard", "Qt6Test", "Qt6Network", "QtNetwork.pyd",
+         "QtTest.pyd", "platforminputcontexts", "networkinformation", "plugins/tls")
+
+
+def _keep(entry):
+    name = entry[0].replace("\\", "/")
+    if any(d.replace("\\", "/") in name for d in _DROP):
+        return False
+    if "/translations/" in name and name.endswith(".qm"):
+        return name.rsplit("/", 1)[-1].split("_")[-1] in ("de.qm", "en.qm")
+    return True
+
+
+a.binaries = [e for e in a.binaries if _keep(e)]
+a.datas = [e for e in a.datas if _keep(e)]
 pyz = PYZ(a.pure)
 exe = EXE(
     pyz, a.scripts, [],

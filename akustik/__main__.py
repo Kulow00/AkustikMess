@@ -1,5 +1,6 @@
 """Programmstart: ``python -m akustik``"""
 
+import os
 import sys
 
 
@@ -39,8 +40,19 @@ def main() -> int:
     app.setApplicationName(APP_NAME)
     app.setStyle("Fusion")
     apply_dark_theme(app)
+    if os.environ.get("AKUSTIKMESS_SELFTEST"):          # Prüfung des gebauten Programms (siehe selftest.py)
+        from .selftest import run
+        return run(app)
     win = MainWindow()
     win.show()
+    # große Module (scipy.signal) kurz nach dem Öffnen im Hintergrund vorladen – das Fenster ist sofort da,
+    # und bis zum ersten Messen ist alles geladen
+    import threading
+
+    from PySide6 import QtCore
+
+    from ._lazy import preload
+    QtCore.QTimer.singleShot(300, lambda: threading.Thread(target=preload, name="Vorladen", daemon=True).start())
     return app.exec()
 
 

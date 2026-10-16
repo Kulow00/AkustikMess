@@ -79,48 +79,62 @@ class Room3DView(QtWidgets.QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._last: dict | None = None
-        lay = QtWidgets.QVBoxLayout(self)
+        self.lay = lay = QtWidgets.QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         self.view = None
+        self.gl = None
+        self._tried = False        # OpenGL wird erst beim ersten Gebrauch geladen (schnellerer Programmstart)
         self.items: list = []
         self._camera_set = False
+        bar = QtWidgets.QHBoxLayout()
+        bar.addWidget(QtWidgets.QLabel("Ansicht:"))
+        for name in VIEWS_3D:
+            b = QtWidgets.QPushButton(name)
+            b.clicked.connect(lambda _=False, n=name: self.set_camera(n))
+            bar.addWidget(b)
+        self.chk_cov = QtWidgets.QCheckBox("Abstrahlung der Tops (−6 dB) zeigen")
+        self.chk_cov.setChecked(True)
+        self.chk_cov.toggled.connect(lambda _: self.coverage_toggled.emit())
+        bar.addWidget(self.chk_cov)
+        bar.addStretch(1)
+        lay.addLayout(bar)
+        self.slot = QtWidgets.QVBoxLayout()           # hier kommt das 3D-Bild hinein
+        lay.addLayout(self.slot, 1)
+        self.info = QtWidgets.QLabel()
+        self.info.setWordWrap(True)
+        self.info.setMaximumHeight(90)
+        self.info.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+        lay.addWidget(self.info)
+        hint = QtWidgets.QLabel("Drehen: linke Maustaste · Zoomen: Mausrad · Verschieben: mittlere Maustaste "
+                                "oder Strg + linke Maustaste. Seitenansicht: Blick quer durch den Raum – "
+                                "zeigt, wie hoch die Tops strahlen und wo die −6-dB-Kanten die Hörhöhe treffen.")
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: gray;")
+        lay.addWidget(hint)
+
+    def _ensure_gl(self) -> None:
+        if self._tried:
+            return
+        self._tried = True
         try:
             import pyqtgraph.opengl as gl  # noqa: PLC0415
             self.gl = gl
             self.view = gl.GLViewWidget()
             self.view.setBackgroundColor((15, 17, 20))
-            lay.addWidget(self.view, 1)        # 3D-Bild bekommt den ganzen freien Platz
-            bar = QtWidgets.QHBoxLayout()
-            bar.addWidget(QtWidgets.QLabel("Ansicht:"))
-            for name in VIEWS_3D:
-                b = QtWidgets.QPushButton(name)
-                b.clicked.connect(lambda _=False, n=name: self.set_camera(n))
-                bar.addWidget(b)
-            self.chk_cov = QtWidgets.QCheckBox("Abstrahlung der Tops (−6 dB) zeigen")
-            self.chk_cov.setChecked(True)
-            self.chk_cov.toggled.connect(lambda _: self.coverage_toggled.emit())
-            bar.addWidget(self.chk_cov)
-            bar.addStretch(1)
-            lay.insertLayout(0, bar)
-            self.info = QtWidgets.QLabel()
-            self.info.setWordWrap(True)
-            self.info.setMaximumHeight(90)
-            self.info.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
-            lay.addWidget(self.info)
-            hint = QtWidgets.QLabel("Drehen: linke Maustaste · Zoomen: Mausrad · Verschieben: mittlere Maustaste "
-                                    "oder Strg + linke Maustaste. Seitenansicht: Blick quer durch den Raum – "
-                                    "zeigt, wie hoch die Tops strahlen und wo die −6-dB-Kanten die Hörhöhe treffen.")
-            hint.setWordWrap(True)
-            hint.setStyleSheet("color: gray;")
-            lay.addWidget(hint)
+            self.slot.addWidget(self.view, 1)
         except Exception as exc:  # noqa: BLE001 – kein OpenGL verfügbar
-            self.gl = None
+            self.gl, self.view = None, None
             msg = QtWidgets.QLabel(f"3D-Ansicht nicht verfügbar (OpenGL fehlt):\n{exc}")
             msg.setAlignment(QtCore.Qt.AlignCenter)
-            lay.addWidget(msg)
+            self.slot.addWidget(msg, 1)
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        self._ensure_gl()
+        super().showEvent(event)
 
     @property
     def available(self) -> bool:
+        self._ensure_gl()
         return self.view is not None
 
     def show_scene(self, data: dict) -> None:
@@ -169,8 +183,7 @@ class Room3DView(QtWidgets.QWidget):
             faces = np.array([[0, 1, 2], [0, 2, 3], [0, 3, 4], [0, 4, 1]])
             add(gl.GLMeshItem(vertexes=verts, faces=faces, color=(0.31, 0.76, 0.97, 0.10), smooth=False,
                               drawEdges=False, glOptions="translucent"))
-        if hasattr(self, "info"):
-            self.info.setText(coverage_text(data.get("coverage", [])) if data.get("coverage") else "")
+        self.info.setText(coverage_text(data.get("coverage", [])) if data.get("coverage") else "")
         self._last = data
         if not self._camera_set:
             self.set_camera("Perspektive")
