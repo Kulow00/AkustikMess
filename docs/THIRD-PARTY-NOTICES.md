@@ -13,6 +13,7 @@ license; the license texts are included in the respective package folders inside
 | pyqtgraph | MIT | https://www.pyqtgraph.org |
 | python-sounddevice | MIT | https://github.com/spatialaudio/python-sounddevice |
 | PortAudio | MIT | https://www.portaudio.com |
+| PyOpenGL | BSD-3-Clause | https://pyopengl.sourceforge.net |
 | qrcode | BSD-3-Clause | https://github.com/lincolnloop/python-qrcode |
 | cryptography | Apache-2.0 or BSD-3-Clause | https://cryptography.io |
 | PyInstaller bootloader | GPL-2.0 with bootloader exception | https://pyinstaller.org |

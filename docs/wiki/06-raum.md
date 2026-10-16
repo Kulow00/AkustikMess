@@ -58,9 +58,54 @@ Die erzeugten Delays und Polaritäten stehen in der Tabelle und können direkt s
 3. Liste und Karte zeigen Vorhersage, Messung und Abweichung je Band.
 4. **Vorhersage an Messung angleichen** setzt eine Pegelkorrektur, damit die Karte zu den echten Pegeln passt.
 
+## Darstellungen
+
+Oben in der Seitenleiste unter **Darstellung → Ansicht**:
+
+| Ansicht | Zeigt |
+|---|---|
+| Pegel | Pegelkarte je Band oder A-bewertet; mit **Raumakustik einrechnen** inkl. Reflexionen und Nachhall |
+| STI (Sprachverständlichkeit) | Vorhersage nach IEC 60268-16 aus Direktschall, Nachhall und Störgeräusch – Ziel für Sprachalarmanlagen: Mittel ≥ 0,50 |
+| Wellenbild – Draufsicht | animierte Wellenausbreitung bei einer Frequenz auf Hörhöhe: wo sich Wellen verstärken (kräftige Farben) und auslöschen (weiß, ohne Bewegung) |
+| Wellenbild – Längsschnitt | dasselbe als Schnitt durch den Raum (Tiefe × Höhe) bei wählbarem x |
+| Raummode | Druckverteilung einer Raummode: rote Bereiche = Überhöhung, blaue = Loch. Die Liste zeigt alle Moden bis 250 Hz |
+
+Die Karte und der Tab **3D** (drehen mit der linken Maustaste, zoomen mit dem Mausrad) zeigen Raum, Bühne,
+Lautsprecher mit Ausrichtung, Messpunkte und alle Hörflächen mit ihrer Pegel- bzw. STI-Karte.
+
+## Raumakustik
+
+- **Reflexionen 1. Ordnung:** Spiegelquellen an Seitenwänden, Rückwand, Wand gegenüber, Boden und Decke.
+- **Absorptionsgrade α** für Boden, Wände und Decke: 0 = schallhart (Beton, Glas), ca. 0,3 = Publikum/Teppich,
+  ab 0,7 = Akustikdecke oder Absorber.
+- **Nachhallzeit:** berechnet nach Sabine aus Raumgröße und α – oder mit **Aus Messung übernehmen** die T30
+  (sonst T20) der letzten Messung im Modus Impulsantwort. So passt die Vorhersage zum echten Raum.
+- **Störgeräusch** in dB(A) (Lüftung, Publikum) – geht in die STI-Vorhersage ein.
+
+## Weitere Hörflächen
+
+Unter **Weitere Hörflächen → Hinzufügen…** z. B. eine Empore anlegen (Rechteck in der Draufsicht und Ohrhöhe über
+dem Hallenboden). In der Karte unter **Hörfläche** auswählen; die 3D-Ansicht zeigt alle Flächen gleichzeitig.
+
+## Gemessene Abstrahlung (Polardaten)
+
+Statt der Öffnungswinkel kann für jeden Lautsprecher eine gemessene Abstrahlung verwendet werden: Lautsprecher
+in der Tabelle markieren → **Abstrahlung importieren…** → Datei mit der horizontalen, optional einer zweiten mit
+der vertikalen Ebene. Format (CSV/Text, `;` `,` oder Tab, Dezimalkomma erlaubt):
+
+```
+Hz;0;10;20;30;…;180
+125;0;-0,1;-0,3;…
+1000;0;-0,5;-1,8;…
+```
+
+Erste Zeile: Winkel ab 0° (Achse), erste Spalte: Frequenz, Werte in dB (werden auf die Achse normiert). Solche
+Tabellen exportieren Messprogramme wie ARTA, REW oder VituixCAD. **Öffnungswinkel verwenden** schaltet zurück.
+Herstellerdateien im GLL- oder CLF-Binärformat lassen sich nicht direkt öffnen (nicht offen dokumentiert).
+
 ## Grenzen
 
-Die Vorhersage rechnet im **Freifeld**: ohne Reflexionen, Raummoden und Nachhall. Sie zeigt Abdeckung,
-Interferenzen und Laufzeiteffekte zuverlässig; in halligen Räumen sind die tatsächlichen Pegel weiter hinten höher
-und die Interferenzen schwächer. Lautsprecher werden als Punktquellen mit vereinfachter Abstrahlung berechnet
-(keine Line-Arrays).
+Das Modell rechnet mit Punktquellen im Rechteckraum, Reflexionen 1. Ordnung und einem statistischen
+Nachhallfeld. Abdeckung, Interferenzen, Laufzeiteffekte und die Größenordnung von Nachhall und STI stimmen gut;
+für komplexe Raumformen, Line-Arrays oder Abnahmen nach Norm ist eine Messung bzw. eine vollständige
+Simulationssoftware nötig. Raummoden werden für den leeren Rechteckraum berechnet.

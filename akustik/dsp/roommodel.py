@@ -46,6 +46,28 @@ class Room:
     listen_height: float = 1.2
     resolution: float = 0.25  # Rasterweite der Karte in m
     stage_depth: float = 5.0  # Bühne hinter y = 0 (mit berechnet: wie laut ist es auf der Bühne?)
+    # Raumakustik (Stufe 2)
+    reflections: bool = False         # Spiegelquellen 1. Ordnung (Wände, Boden, Decke)
+    alpha_floor: float = 0.10         # Absorptionsgrad (breitbandig)
+    alpha_walls: float = 0.15
+    alpha_ceiling: float = 0.30
+    rt60: dict = field(default_factory=dict)   # gemessene Nachhallzeit je Oktave {"125": 1.2, …}
+    noise_dba: float = 35.0           # Störgeräusch für die STI-Vorhersage
+
+    @property
+    def y_min(self) -> float:
+        return -max(self.stage_depth, 0.0)
+
+
+@dataclass
+class Plane:
+    """Weitere Hörfläche (z. B. Empore): Rechteck in der Draufsicht, Ohrhöhe über dem Hallenboden."""
+    name: str = "Empore"
+    x0: float = 0.0
+    y0: float = 14.0
+    x1: float = 14.0
+    y1: float = 20.0
+    z: float = 4.5
 
 
 @dataclass
@@ -65,6 +87,7 @@ class Speaker:
     f_low: float = 80.0       # Hochpass (Hz), 0 = keiner
     f_high: float = 0.0       # Tiefpass (Hz), 0 = keiner
     enabled: bool = True
+    polar: dict | None = None  # gemessene Abstrahlung (siehe dsp/polar.py), ersetzt die Öffnungswinkel
 
     @staticmethod
     def top(name="Top", **kw) -> "Speaker":
@@ -126,6 +149,9 @@ def directivity_db(sp: Speaker, f: float, dx=None, dy=None, dz=None, ang=None) -
     h = min(360.0, sp.cov_h * widen)
     v = min(360.0, sp.cov_v * widen)
     th, tv = ang if ang is not None else angles(sp, dx, dy, dz)
+    if sp.polar:
+        from .polar import polar_att_db  # noqa: PLC0415
+        return polar_att_db(sp.polar, f, th, tv)
     if h >= 360 and v >= 360 and sp.kind == "sub":
         return np.zeros(np.shape(th))
     att = -6.0 * ((th / (h / 2)) ** 2 + (tv / (v / 2)) ** 2)
@@ -193,6 +219,17 @@ def band_level(speakers, band, px, py, pz, fraction: int = 1, geo=None) -> np.nd
         e = e + np.abs(pressure(speakers, f, geo=geo)) ** 2
     # Leistung des Bandes: Mittel über die Stützfrequenzen × Bandanteil (1/n der Oktave)
     return 10 * np.log10(e / len(freqs) / (1 if fraction == 1 else fraction) + 1e-30)
+
+
+def plane_grid(plane: Plane, resolution: float) -> tuple[np.ndarray, np.ndarray]:
+    w, d = abs(plane.x1 - plane.x0), abs(plane.y1 - plane.y0)
+    nx = max(2, int(round(w / resolution)) + 1)
+    ny = max(2, int(round(d / resolution)) + 1)
+    if nx * ny > 60000:
+        s = math.sqrt(nx * ny / 60000)
+        nx, ny = max(2, int(nx / s)), max(2, int(ny / s))
+    return (np.linspace(min(plane.x0, plane.x1), max(plane.x0, plane.x1), nx),
+            np.linspace(min(plane.y0, plane.y1), max(plane.y0, plane.y1), ny))
 
 
 def grid(room: Room) -> tuple[np.ndarray, np.ndarray]:
@@ -273,16 +310,23 @@ def sub_setup(kind: str, room: Room, count: int = 4, spacing: float = 1.2, y: fl
     raise ValueError(f"Unbekanntes Sub-Setup: {kind}")
 
 
-def to_dict(room: Room, speakers: list[Speaker], points: list[MeasPoint]) -> dict:
-    return {"room": asdict(room), "speakers": [asdict(s) for s in speakers], "points": [asdict(p) for p in points]}
+def to_dict(room: Room, speakers: list[Speaker], points: list[MeasPoint], planes: list[Plane] = ()) -> dict:
+    return {"room": asdict(room), "speakers": [asdict(s) for s in speakers], "points": [asdict(p) for p in points],
+            "planes": [asdict(p) for p in planes]}
+
+
+def _pick(cls, data):
+    names = cls.__dataclass_fields__
+    return cls(**{k: v for k, v in (data or {}).items() if k in names})
 
 
 def from_dict(d: dict) -> tuple[Room, list[Speaker], list[MeasPoint]]:
-    def pick(cls, data):
-        names = cls.__dataclass_fields__
-        return cls(**{k: v for k, v in (data or {}).items() if k in names})
-    return (pick(Room, d.get("room")), [pick(Speaker, s) for s in d.get("speakers", [])],
-            [pick(MeasPoint, p) for p in d.get("points", [])])
+    return (_pick(Room, d.get("room")), [_pick(Speaker, s) for s in d.get("speakers", [])],
+            [_pick(MeasPoint, p) for p in d.get("points", [])])
+
+
+def planes_from_dict(d: dict) -> list[Plane]:
+    return [_pick(Plane, p) for p in d.get("planes", [])]
 
 
 # --- Messwerte aus gespeicherten Kurven ------------------------------------------------------

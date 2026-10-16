@@ -123,7 +123,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tabs.addTab(self.realtime, "Echtzeit")
         self.tabs.addTab(self.impulse, "Impulsantwort")
         self.tabs.addTab(self.spl, "SPL")
-        self.room = RoomView(self.state, self.realtime)
+        self.room = RoomView(self.state, self.realtime, self.impulse)
         self.tabs.addTab(self.room, "Raum")
         self.setCentralWidget(self.tabs)
         self.remote = RemoteController(self)

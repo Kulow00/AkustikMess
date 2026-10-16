@@ -1,4 +1,10 @@
-"""Raum-Modus: Lautsprecher im Raum, Pegelkarte der Hörfläche, Messpunkte (Messung ↔ Vorhersage)."""
+"""Raum-Modus: Lautsprecher im Raum, Pegel-/STI-Karten, Wellenbild, Raummoden, 3D, Messpunkte.
+
+Stufe 1: Raum, Lautsprecher (Öffnungswinkel), Pegelkarte mit phasenrichtiger Summe, Sub-Setups, Messpunkte.
+Stufe 2: Wellenbild (Draufsicht/Längsschnitt, animiert), Raummoden, Reflexionen 1. Ordnung, Nachhall
+         (gemessen oder berechnet), STI-Karte.
+Stufe 3: 3D-Ansicht, Polardaten-Import (gemessene Abstrahlung), mehrere Hörflächen (z. B. Empore).
+"""
 
 from __future__ import annotations
 
@@ -7,9 +13,13 @@ import math
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6 import QtCore, QtGui, QtWidgets
+from PySide6 import QtCore, QtWidgets
 
+from ..dsp import polar as polar_mod
+from ..dsp import roomacoustics as ra
 from ..dsp import roommodel as rm
+from ..dsp.sti import rating as sti_rating
+from .room3d import Room3DView, _rgba, scene_data
 from .session import apply_controls_state, controls_state, name_controls
 from .state import AppState
 
@@ -17,7 +27,17 @@ from .state import AppState
 CMAP = pg.ColorMap(np.array([0.0, 0.2, 0.4, 0.6, 0.8, 1.0]),
                    np.array([(20, 30, 110), (30, 110, 230), (40, 200, 200), (90, 210, 60),
                              (250, 220, 40), (230, 40, 30)], dtype=np.ubyte))
+# STI: schlecht rot → gut grün
+CMAP_STI = pg.ColorMap(np.array([0.0, 0.3, 0.45, 0.6, 0.75, 1.0]),
+                       np.array([(150, 20, 20), (220, 60, 40), (240, 160, 40), (230, 220, 60),
+                                 (90, 200, 80), (20, 140, 70)], dtype=np.ubyte))
+# Wellenbild: Unterdruck blau, Überdruck rot
+CMAP_WAVE = pg.ColorMap(np.array([0.0, 0.5, 1.0]),
+                        np.array([(30, 80, 220), (240, 240, 240), (220, 40, 30)], dtype=np.ubyte))
 BAND_A = "Breitband (A-bewertet)"
+VIEWS = {"Pegel": "level", "STI (Sprachverständlichkeit)": "sti", "Wellenbild – Draufsicht": "wave_top",
+         "Wellenbild – Längsschnitt": "wave_section", "Raummode": "mode"}
+MAIN_PLANE = "Hauptfläche (Parkett)"
 
 # Spalten der Lautsprecher-Tabelle: (Attribut, Überschrift, Art)
 COLUMNS = [("enabled", "An", "bool"), ("name", "Name", "str"), ("kind", "Typ", "kind"),
@@ -26,7 +46,7 @@ COLUMNS = [("enabled", "An", "bool"), ("name", "Name", "str"), ("kind", "Typ", "
            ("level", "Pegel @1 m [dB]", "float"), ("delay_ms", "Delay [ms]", "float"),
            ("polarity", "Polarität", "pol"), ("cov_h", "Öffnung H [°]", "float"),
            ("cov_v", "Öffnung V [°]", "float"), ("f_low", "Hochpass [Hz]", "float"),
-           ("f_high", "Tiefpass [Hz]", "float")]
+           ("f_high", "Tiefpass [Hz]", "float"), ("polar", "Abstrahlung", "polar")]
 
 
 def example_setup(room: rm.Room) -> list[rm.Speaker]:
@@ -39,44 +59,78 @@ def example_setup(room: rm.Room) -> list[rm.Speaker]:
 class _Worker(QtCore.QThread):
     done = QtCore.Signal(int, object)
 
-    def __init__(self, job_id, room, speakers, band, fraction):
+    def __init__(self, job_id, fn):
         super().__init__()
-        self.args = (job_id, copy.deepcopy(room), copy.deepcopy(speakers), band, fraction)
+        self.job_id, self.fn = job_id, fn
 
     def run(self) -> None:
-        job_id, room, speakers, band, fraction = self.args
         try:
-            self.done.emit(job_id, rm.level_map(room, speakers, band, fraction))
+            self.done.emit(self.job_id, self.fn())
         except Exception as exc:  # noqa: BLE001
-            self.done.emit(job_id, exc)
+            self.done.emit(self.job_id, exc)
+
+
+class PlaneDialog(QtWidgets.QDialog):
+    def __init__(self, room: rm.Room, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Hörfläche hinzufügen")
+        f = QtWidgets.QFormLayout(self)
+        self.name = QtWidgets.QLineEdit("Empore")
+
+        def sp(v, lo=-50, hi=300):
+            s = QtWidgets.QDoubleSpinBox(minimum=lo, maximum=hi, value=v, decimals=2, singleStep=0.5, suffix=" m")
+            return s
+        self.x0, self.x1 = sp(0), sp(room.width)
+        self.y0, self.y1 = sp(round(room.length * 0.7, 1)), sp(room.length)
+        self.z = sp(4.5, 0, 60)
+        f.addRow("Name", self.name)
+        f.addRow("x von", self.x0)
+        f.addRow("x bis", self.x1)
+        f.addRow("y von", self.y0)
+        f.addRow("y bis", self.y1)
+        f.addRow("Ohrhöhe über Hallenboden", self.z)
+        bb = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
+        bb.accepted.connect(self.accept)
+        bb.rejected.connect(self.reject)
+        f.addRow(bb)
+
+    def plane(self) -> rm.Plane:
+        return rm.Plane(self.name.text() or "Empore", self.x0.value(), self.y0.value(), self.x1.value(),
+                        self.y1.value(), self.z.value())
 
 
 class RoomView(QtWidgets.QWidget):
-    def __init__(self, state: AppState, realtime=None, parent=None):
+    def __init__(self, state: AppState, realtime=None, impulse=None, parent=None):
         super().__init__(parent)
-        self.state, self.realtime = state, realtime
+        self.state, self.realtime, self.impulse = state, realtime, impulse
         self.room = rm.Room()
         self.speakers: list[rm.Speaker] = example_setup(self.room)
         self.points: list[rm.MeasPoint] = []
-        self.map = None                 # (xs, ys, levels)
+        self.planes: list[rm.Plane] = []
+        self.map = None                 # (xs, ys, Werte) der aktuellen Karte
+        self.result: dict | None = None
         self._job = 0
         self._workers: list[_Worker] = []
         self._placing = False
+        self._phase = 0.0
+        self._modes: list[dict] = []
         self._build()
-        self._recalc = QtCore.QTimer(self, singleShot=True, interval=120, timeout=self.compute)
+        self._recalc = QtCore.QTimer(self, singleShot=True, interval=150, timeout=self.compute)
+        self._anim = QtCore.QTimer(self, interval=40, timeout=self._animate)
         self._fill_room_spins()
         self._fill_table()
-        self.schedule()
+        self._fill_planes()
+        self._fill_modes()
+        self._update_rt_label()
+        self._view_changed()
 
     # --- Aufbau -------------------------------------------------------------------
     def _build(self) -> None:
         lay = QtWidgets.QHBoxLayout(self)
         left = QtWidgets.QSplitter(QtCore.Qt.Vertical)
+        self.view_tabs = QtWidgets.QTabWidget()
         self.plot = pg.PlotWidget()
         self.plot.setAspectLocked(True)
-        self.plot.getViewBox().invertY(True)          # Bühne oben, wie auf einem Plan
-        self.plot.setLabel("bottom", "Breite x [m]")
-        self.plot.setLabel("left", "Tiefe y [m] (0 = Bühnenkante)")
         self.plot.showGrid(x=True, y=True, alpha=0.15)
         self.img = pg.ImageItem(axisOrder="row-major")
         self.img.setZValue(-10)
@@ -85,8 +139,10 @@ class RoomView(QtWidgets.QWidget):
         self.cbar.setImageItem(self.img, insert_in=self.plot.getPlotItem())
         self.outline = pg.PlotDataItem(pen=pg.mkPen("#ddd", width=2))
         self.stage = pg.PlotDataItem(pen=pg.mkPen("#ffcc33", width=3, style=QtCore.Qt.DashLine))
-        self.plot.addItem(self.outline)
-        self.plot.addItem(self.stage)
+        self.plane_outline = pg.PlotDataItem(pen=pg.mkPen("#9fd0ff", width=1.5, style=QtCore.Qt.DotLine),
+                                             connect="pairs")
+        for it in (self.outline, self.stage, self.plane_outline):
+            self.plot.addItem(it)
         self.pts_item = pg.ScatterPlotItem(size=11, symbol="o", pen=pg.mkPen("k", width=1.5),
                                            brush=pg.mkBrush("#ffffff"))
         self.pts_item.setZValue(20)
@@ -99,19 +155,24 @@ class RoomView(QtWidgets.QWidget):
         self.hover.hide()
         self.plot.scene().sigMouseMoved.connect(self._mouse_moved)
         self.plot.scene().sigMouseClicked.connect(self._mouse_clicked)
-        left.addWidget(self.plot)
+        self.view_tabs.addTab(self.plot, "Karte")
+        self.view3d = Room3DView()
+        self.view_tabs.addTab(self.view3d, "3D")
+        self.view_tabs.currentChanged.connect(lambda _: self._update_3d())
+        left.addWidget(self.view_tabs)
 
         box = QtWidgets.QWidget()
         bl = QtWidgets.QVBoxLayout(box)
         bl.setContentsMargins(0, 0, 0, 0)
         row = QtWidgets.QHBoxLayout()
         for text, slot in (("+ Top", lambda: self.add_speaker("top")), ("+ Sub", lambda: self.add_speaker("sub")),
-                           ("Duplizieren", self.duplicate_speaker), ("Entfernen", self.remove_speaker)):
+                           ("Duplizieren", self.duplicate_speaker), ("Entfernen", self.remove_speaker),
+                           ("Abstrahlung importieren…", self.import_polar),
+                           ("Öffnungswinkel verwenden", self.clear_polar)):
             b = QtWidgets.QPushButton(text)
             b.clicked.connect(slot)
             row.addWidget(b)
         row.addStretch(1)
-        row.addWidget(QtWidgets.QLabel("Lautsprecher auch in der Karte mit der Maus verschiebbar."))
         bl.addLayout(row)
         self.table = QtWidgets.QTableWidget(0, len(COLUMNS))
         self.table.setHorizontalHeaderLabels([c[1] for c in COLUMNS])
@@ -121,6 +182,8 @@ class RoomView(QtWidgets.QWidget):
         bl.addWidget(self.table)
         left.addWidget(box)
         left.setSizes([620, 230])
+        left.setStretchFactor(0, 3)   # Karte/3D bekommt den meisten Platz
+        left.setStretchFactor(1, 1)
         lay.addWidget(left, 1)
 
         panel = QtWidgets.QWidget()
@@ -128,7 +191,7 @@ class RoomView(QtWidgets.QWidget):
         scroll = QtWidgets.QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(panel)
-        scroll.setFixedWidth(320)
+        scroll.setFixedWidth(330)
         lay.addWidget(scroll)
 
         def spin(lo, hi, val, suffix, step=0.5, dec=2):
@@ -137,15 +200,62 @@ class RoomView(QtWidgets.QWidget):
             s.setKeyboardTracking(False)
             return s
 
+        # Darstellung
+        g = QtWidgets.QGroupBox("Darstellung")
+        self.f_view = f = QtWidgets.QFormLayout(g)
+        self.cb_view = QtWidgets.QComboBox()
+        self.cb_view.addItems(list(VIEWS))
+        self.cb_plane = QtWidgets.QComboBox()
+        self.chk_room = QtWidgets.QCheckBox("Raumakustik einrechnen (Reflexionen, Nachhall)")
+        self.cb_res = QtWidgets.QComboBox()
+        self.cb_res.addItems(["Oktaven", "Terzen"])
+        self.cb_band = QtWidgets.QComboBox()
+        self.sp_range = spin(6, 60, 24, " dB", 3, 0)
+        self.sp_offset = spin(-60, 60, 0, " dB", 0.5, 1)
+        self.sp_offset.setToolTip("Korrektur aller vorhergesagten Pegel (z. B. nach „An Messung angleichen“)")
+        self.sp_wave = spin(10, 2000, 63, " Hz", 1, 1)
+        self.chk_anim = QtWidgets.QCheckBox("Animation")
+        self.chk_anim.setChecked(True)
+        self.sp_section = spin(-50, 300, 7, " m", 0.5)
+        self.cb_mode = QtWidgets.QComboBox()
+        f.addRow("Ansicht", self.cb_view)
+        f.addRow("Hörfläche", self.cb_plane)
+        f.addRow(self.chk_room)
+        f.addRow("Auflösung", self.cb_res)
+        f.addRow("Frequenz", self.cb_band)
+        f.addRow("Farbbereich", self.sp_range)
+        f.addRow("Pegelkorrektur", self.sp_offset)
+        f.addRow("Frequenz Welle", self.sp_wave)
+        f.addRow(self.chk_anim)
+        f.addRow("Schnitt bei x", self.sp_section)
+        f.addRow("Mode", self.cb_mode)
+        self.lbl_stats = QtWidgets.QLabel("–")
+        self.lbl_stats.setWordWrap(True)
+        f.addRow(self.lbl_stats)
+        self.cb_view.currentIndexChanged.connect(self._view_changed)
+        self.cb_plane.currentIndexChanged.connect(self.schedule)
+        self.chk_room.toggled.connect(self.schedule)
+        self.cb_res.currentIndexChanged.connect(self._fill_bands)
+        self.cb_band.currentIndexChanged.connect(self.schedule)
+        for s in (self.sp_wave, self.sp_section):
+            s.valueChanged.connect(self.schedule)
+        self.cb_mode.currentIndexChanged.connect(self.schedule)
+        self.chk_anim.toggled.connect(self._anim_toggled)
+        self.sp_range.valueChanged.connect(self._redraw_map)
+        self.sp_offset.valueChanged.connect(self._redraw_map)
+        pl.addWidget(g)
+        self._fill_bands()
+
+        # Raum
         g = QtWidgets.QGroupBox("Raum")
         f = QtWidgets.QFormLayout(g)
         self.sp_len = spin(2, 300, 20, " m")
         self.sp_wid = spin(2, 300, 14, " m")
         self.sp_hei = spin(2, 60, 6, " m")
         self.sp_lis = spin(0, 20, 1.2, " m", 0.1)
-        self.sp_res = spin(0.1, 2, 0.25, " m", 0.05)
         self.sp_stage = spin(0, 30, 5, " m", 0.5)
         self.sp_stage.setToolTip("Bühnenbereich hinter der Bühnenkante – zeigt, wie viel Pegel auf der Bühne ankommt")
+        self.sp_res = spin(0.1, 2, 0.25, " m", 0.05)
         f.addRow("Länge (Tiefe)", self.sp_len)
         f.addRow("Breite", self.sp_wid)
         f.addRow("Höhe", self.sp_hei)
@@ -156,28 +266,58 @@ class RoomView(QtWidgets.QWidget):
             s.valueChanged.connect(self._room_changed)
         pl.addWidget(g)
 
-        g = QtWidgets.QGroupBox("Anzeige")
+        # Raumakustik
+        g = QtWidgets.QGroupBox("Raumakustik")
         f = QtWidgets.QFormLayout(g)
-        self.cb_res = QtWidgets.QComboBox()
-        self.cb_res.addItems(["Oktaven", "Terzen"])
-        self.cb_band = QtWidgets.QComboBox()
-        self.sp_range = spin(6, 60, 24, " dB", 3, 0)
-        self.sp_offset = spin(-60, 60, 0, " dB", 0.5, 1)
-        self.sp_offset.setToolTip("Korrektur aller vorhergesagten Pegel (z. B. nach „An Messung angleichen“)")
-        f.addRow("Auflösung", self.cb_res)
-        f.addRow("Frequenz", self.cb_band)
-        f.addRow("Farbbereich", self.sp_range)
-        f.addRow("Pegelkorrektur", self.sp_offset)
-        self.lbl_stats = QtWidgets.QLabel("–")
-        self.lbl_stats.setWordWrap(True)
-        f.addRow(self.lbl_stats)
-        self.cb_res.currentIndexChanged.connect(self._fill_bands)
-        self.cb_band.currentIndexChanged.connect(self.schedule)
-        self.sp_range.valueChanged.connect(self._redraw_map)
-        self.sp_offset.valueChanged.connect(self._redraw_map)
+        self.chk_refl = QtWidgets.QCheckBox("Reflexionen 1. Ordnung (Wände, Boden, Decke)")
+        self.sp_a_floor = spin(0, 1, 0.10, "", 0.05)
+        self.sp_a_walls = spin(0, 1, 0.15, "", 0.05)
+        self.sp_a_ceil = spin(0, 1, 0.30, "", 0.05)
+        for s in (self.sp_a_floor, self.sp_a_walls, self.sp_a_ceil):
+            s.setToolTip("Absorptionsgrad α: 0 = schallhart (Beton, Glas), 0,3 = Publikum/Teppich, "
+                         "0,7+ = Akustikdecke/Absorber")
+        self.sp_noise = spin(0, 110, 35, " dB(A)", 1, 0)
+        self.sp_noise.setToolTip("Hintergrundgeräusch im Raum (Lüftung, Publikum) – geht in die STI-Vorhersage ein")
+        f.addRow(self.chk_refl)
+        f.addRow("α Boden", self.sp_a_floor)
+        f.addRow("α Wände", self.sp_a_walls)
+        f.addRow("α Decke", self.sp_a_ceil)
+        f.addRow("Störgeräusch", self.sp_noise)
+        self.lbl_rt = QtWidgets.QLabel()
+        self.lbl_rt.setWordWrap(True)
+        f.addRow(self.lbl_rt)
+        row = QtWidgets.QHBoxLayout()
+        b1 = QtWidgets.QPushButton("Aus Messung übernehmen")
+        b1.setToolTip("Nachhallzeit (T30, sonst T20) der letzten Messung im Modus Impulsantwort übernehmen")
+        b1.clicked.connect(self.take_measured_rt)
+        b2 = QtWidgets.QPushButton("Berechnen")
+        b2.setToolTip("Nachhallzeit nach Sabine aus Raumgröße und Absorptionsgraden")
+        b2.clicked.connect(self.use_computed_rt)
+        row.addWidget(b1)
+        row.addWidget(b2)
+        f.addRow(row)
+        self.chk_refl.toggled.connect(self._room_changed)
+        for s in (self.sp_a_floor, self.sp_a_walls, self.sp_a_ceil, self.sp_noise):
+            s.valueChanged.connect(self._room_changed)
         pl.addWidget(g)
-        self._fill_bands()
 
+        # Hörflächen
+        g = QtWidgets.QGroupBox("Weitere Hörflächen (z. B. Empore)")
+        v = QtWidgets.QVBoxLayout(g)
+        self.list_planes = QtWidgets.QListWidget()
+        self.list_planes.setMaximumHeight(80)
+        v.addWidget(self.list_planes)
+        row = QtWidgets.QHBoxLayout()
+        b1 = QtWidgets.QPushButton("Hinzufügen…")
+        b1.clicked.connect(self.add_plane_dialog)
+        b2 = QtWidgets.QPushButton("Entfernen")
+        b2.clicked.connect(self.remove_plane)
+        row.addWidget(b1)
+        row.addWidget(b2)
+        v.addLayout(row)
+        pl.addWidget(g)
+
+        # Subwoofer-Setup
         g = QtWidgets.QGroupBox("Subwoofer-Setup")
         f = QtWidgets.QFormLayout(g)
         self.cb_sub = QtWidgets.QComboBox()
@@ -210,6 +350,7 @@ class RoomView(QtWidgets.QWidget):
         f.addRow(b)
         pl.addWidget(g)
 
+        # Messpunkte
         g = QtWidgets.QGroupBox("Messpunkte")
         v = QtWidgets.QVBoxLayout(g)
         self.btn_place = QtWidgets.QPushButton("Punkt setzen (in die Karte klicken)")
@@ -234,8 +375,9 @@ class RoomView(QtWidgets.QWidget):
         v.addWidget(b3)
         pl.addWidget(g)
 
-        info = QtWidgets.QLabel("Vorhersage im Freifeld (ohne Reflexionen und Nachhall): zeigt Abdeckung, "
-                                "Interferenzen und Laufzeiteffekte. Raumakustik folgt in Stufe 2.")
+        info = QtWidgets.QLabel("Vorhersage mit Punktquellen, Spiegelquellen 1. Ordnung und statistischem Nachhall "
+                                "im Rechteckraum – für Planung und Einmessung, kein Ersatz für eine zertifizierte "
+                                "Simulation.")
         info.setWordWrap(True)
         info.setStyleSheet("color: gray;")
         pl.addWidget(info)
@@ -244,17 +386,29 @@ class RoomView(QtWidgets.QWidget):
 
     # --- Daten ↔ Bedienelemente -------------------------------------------------------
     def _fill_room_spins(self) -> None:
-        for s, v in ((self.sp_len, self.room.length), (self.sp_wid, self.room.width), (self.sp_hei, self.room.height),
-                     (self.sp_lis, self.room.listen_height), (self.sp_res, self.room.resolution),
-                     (self.sp_stage, self.room.stage_depth)):
+        r = self.room
+        for s, v in ((self.sp_len, r.length), (self.sp_wid, r.width), (self.sp_hei, r.height),
+                     (self.sp_lis, r.listen_height), (self.sp_res, r.resolution), (self.sp_stage, r.stage_depth),
+                     (self.sp_a_floor, r.alpha_floor), (self.sp_a_walls, r.alpha_walls),
+                     (self.sp_a_ceil, r.alpha_ceiling), (self.sp_noise, r.noise_dba)):
             s.blockSignals(True)
             s.setValue(v)
             s.blockSignals(False)
+        self.chk_refl.blockSignals(True)
+        self.chk_refl.setChecked(r.reflections)
+        self.chk_refl.blockSignals(False)
 
     def _room_changed(self) -> None:
         self.room = rm.Room(length=self.sp_len.value(), width=self.sp_wid.value(), height=self.sp_hei.value(),
                             listen_height=self.sp_lis.value(), resolution=self.sp_res.value(),
-                            stage_depth=self.sp_stage.value())
+                            stage_depth=self.sp_stage.value(), reflections=self.chk_refl.isChecked(),
+                            alpha_floor=self.sp_a_floor.value(), alpha_walls=self.sp_a_walls.value(),
+                            alpha_ceiling=self.sp_a_ceil.value(), rt60=dict(self.room.rt60),
+                            noise_dba=self.sp_noise.value())
+        if self.chk_refl.isChecked() and not self.chk_room.isChecked():
+            self.chk_room.setChecked(True)
+        self._fill_modes()
+        self._update_rt_label()
         self.schedule()
 
     def _fill_bands(self) -> None:
@@ -269,6 +423,38 @@ class RoomView(QtWidgets.QWidget):
         self.cb_band.blockSignals(False)
         self.schedule()
 
+    def _fill_modes(self) -> None:
+        cur = self.cb_mode.currentText()
+        self._modes = ra.room_modes(self.room, 250.0)
+        self.cb_mode.blockSignals(True)
+        self.cb_mode.clear()
+        names = {"axial": "axial", "tangential": "tangential", "oblique": "schräg"}
+        for m in self._modes:
+            self.cb_mode.addItem(f"{m['f']:.1f} Hz – {m['n'][0]},{m['n'][1]},{m['n'][2]} ({names[m['kind']]})")
+        i = self.cb_mode.findText(cur)
+        self.cb_mode.setCurrentIndex(max(i, 0))
+        self.cb_mode.blockSignals(False)
+
+    def _fill_planes(self) -> None:
+        cur = self.cb_plane.currentText()
+        self.cb_plane.blockSignals(True)
+        self.cb_plane.clear()
+        self.cb_plane.addItem(MAIN_PLANE)
+        for p in self.planes:
+            self.cb_plane.addItem(p.name)
+        i = self.cb_plane.findText(cur)
+        self.cb_plane.setCurrentIndex(max(i, 0))
+        self.cb_plane.blockSignals(False)
+        self.list_planes.clear()
+        for p in self.planes:
+            self.list_planes.addItem(f"{p.name}: x {p.x0:g}–{p.x1:g} m, y {p.y0:g}–{p.y1:g} m, Ohrhöhe {p.z:g} m")
+
+    def _update_rt_label(self) -> None:
+        src = "gemessen" if self.room.rt60 else "berechnet (Sabine)"
+        vals = " · ".join(f"{b if b < 1000 else b // 1000}{'k' if b >= 1000 else ''}: {ra.rt60(self.room, b):.2f}"
+                          for b in (125, 250, 500, 1000, 2000, 4000))
+        self.lbl_rt.setText(f"<b>Nachhallzeit T60 [s]</b> ({src})<br>{vals}")
+
     @property
     def band(self):
         return self.cb_band.currentData() if hasattr(self, "cb_band") and self.cb_band.count() else None
@@ -277,10 +463,41 @@ class RoomView(QtWidgets.QWidget):
     def fraction(self) -> int:
         return 1 if self.cb_res.currentText() == "Oktaven" else 3
 
+    @property
+    def view_kind(self) -> str:
+        return VIEWS[self.cb_view.currentText()]
+
+    @property
+    def plane(self) -> rm.Plane | None:
+        i = self.cb_plane.currentIndex() - 1
+        return self.planes[i] if 0 <= i < len(self.planes) else None
+
     def band_key(self, band=None) -> str:
         band = self.band if band is None else band
         return "A" if band == "A" else f"{float(band):g}"
 
+    def _view_changed(self) -> None:
+        kind = self.view_kind
+        rows = {self.cb_plane: kind in ("level", "sti", "mode"), self.chk_room: kind in ("level", "wave_top",
+                                                                                        "wave_section"),
+                self.cb_res: kind == "level", self.cb_band: kind == "level", self.sp_range: kind == "level",
+                self.sp_offset: kind == "level", self.sp_wave: kind.startswith("wave"),
+                self.chk_anim: kind.startswith("wave"), self.sp_section: kind == "wave_section",
+                self.cb_mode: kind == "mode"}
+        for w, vis in rows.items():
+            self.f_view.setRowVisible(w, vis)
+        if kind == "sti" and not self.chk_room.isChecked():
+            pass  # STI rechnet immer mit Raum
+        self._anim_toggled(self.chk_anim.isChecked())
+        self.schedule()
+
+    def _anim_toggled(self, on: bool) -> None:
+        if on and self.view_kind.startswith("wave") and self.isVisible():
+            self._anim.start()
+        else:
+            self._anim.stop()
+
+    # --- Lautsprecher-Tabelle ---------------------------------------------------------
     def _fill_table(self) -> None:
         self.table.blockSignals(True)
         self.table.setRowCount(len(self.speakers))
@@ -295,6 +512,9 @@ class RoomView(QtWidgets.QWidget):
                     item = QtWidgets.QTableWidgetItem("Sub" if val == "sub" else "Top")
                 elif kind == "pol":
                     item = QtWidgets.QTableWidgetItem("+" if val > 0 else "−")
+                elif kind == "polar":
+                    item = QtWidgets.QTableWidgetItem("Polardaten" if val else "Öffnungswinkel")
+                    item.setFlags(QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsSelectable)
                 elif kind == "float":
                     item = QtWidgets.QTableWidgetItem(f"{val:g}")
                 else:
@@ -319,14 +539,13 @@ class RoomView(QtWidgets.QWidget):
                 sp.polarity = -1 if text in ("-", "−", "-1", "inv", "invertiert") else 1
             elif kind == "float":
                 setattr(sp, key, float(text.replace(",", ".")))
-            else:
+            elif kind == "str":
                 setattr(sp, key, text)
         except ValueError:
             pass
         self._fill_table()   # Anzeige normalisieren (z. B. „1,5“ → 1.5)
         self.schedule()
 
-    # --- Lautsprecher bearbeiten ---------------------------------------------------------
     def add_speaker(self, kind: str) -> None:
         cx = self.room.width / 2
         sp = rm.Speaker.sub(f"Sub {self._count('sub') + 1}", x=cx, y=0.5) if kind == "sub" else \
@@ -356,6 +575,41 @@ class RoomView(QtWidgets.QWidget):
         self._fill_table()
         self.schedule()
 
+    def import_polar(self) -> None:
+        rows = self._selected_rows()
+        if not rows:
+            QtWidgets.QMessageBox.information(self, "Abstrahlung", "Bitte zuerst Lautsprecher in der Tabelle wählen.")
+            return
+        h_path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self, "Horizontale Polardaten (Frequenz × Winkel)", "", "Polardaten (*.csv *.txt *.tsv);;Alle Dateien (*)")
+        if not h_path:
+            return
+        v_path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self, "Vertikale Polardaten (optional – Abbrechen = wie horizontal)", "",
+            "Polardaten (*.csv *.txt *.tsv);;Alle Dateien (*)")
+        try:
+            self.apply_polar(rows, self._read(h_path), self._read(v_path) if v_path else None)
+        except (OSError, polar_mod.PolarError) as exc:
+            QtWidgets.QMessageBox.warning(self, "Abstrahlung", f"Datei nicht lesbar:\n{exc}")
+
+    @staticmethod
+    def _read(path: str) -> str:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            return fh.read(2_000_000)
+
+    def apply_polar(self, rows: list[int], h_text: str, v_text: str | None = None) -> None:
+        data = polar_mod.make_polar(h_text, v_text)
+        for r in rows:
+            self.speakers[r].polar = copy.deepcopy(data)
+        self._fill_table()
+        self.schedule()
+
+    def clear_polar(self) -> None:
+        for r in self._selected_rows():
+            self.speakers[r].polar = None
+        self._fill_table()
+        self.schedule()
+
     def generate_subs(self) -> None:
         subs = rm.sub_setup(self.cb_sub.currentText(), self.room, count=self.sp_sub_n.value(),
                             spacing=self.sp_sub_d.value(), y=self.sp_sub_y.value(), z=self.sp_sub_z.value(),
@@ -370,26 +624,173 @@ class RoomView(QtWidgets.QWidget):
             self.cb_band.setCurrentIndex(self.cb_band.findData(63) if self.cb_band.findData(63) >= 0 else 0)
         self.schedule()
 
+    # --- Hörflächen und Nachhall ----------------------------------------------------------
+    def add_plane_dialog(self) -> None:
+        dlg = PlaneDialog(self.room, self)
+        if dlg.exec() == QtWidgets.QDialog.Accepted:
+            self.add_plane(dlg.plane())
+
+    def add_plane(self, plane: rm.Plane) -> None:
+        self.planes.append(plane)
+        self._fill_planes()
+        self.schedule()
+
+    def remove_plane(self) -> None:
+        r = self.list_planes.currentRow()
+        if 0 <= r < len(self.planes):
+            del self.planes[r]
+            self._fill_planes()
+            self.schedule()
+
+    def take_measured_rt(self) -> None:
+        results = getattr(self.impulse, "results", None) or []
+        rt = {}
+        for res in results:
+            t = res.t30 if res.t30 and np.isfinite(res.t30) else res.t20
+            if res.center and t and np.isfinite(t) and t > 0:
+                rt[f"{res.center:g}"] = round(float(t), 3)
+        if not rt:
+            QtWidgets.QMessageBox.information(self, "Nachhallzeit", "Noch keine Impulsantwort gemessen "
+                                              "(Modus Impulsantwort → Messen).")
+            return
+        self.room.rt60 = rt
+        self._update_rt_label()
+        self.schedule()
+
+    def use_computed_rt(self) -> None:
+        self.room.rt60 = {}
+        self._update_rt_label()
+        self.schedule()
+
+    # --- Rechnen ---------------------------------------------------------------------
+    def schedule(self) -> None:
+        """Neu rechnen – aber nur, wenn der Raum-Modus sichtbar ist (spart Rechenzeit beim Messen)."""
+        if not hasattr(self, "_recalc"):
+            return
+        if not self.isVisible():
+            self._dirty = True
+            return
+        self._recalc.start()
+
+    def showEvent(self, event) -> None:  # noqa: N802
+        super().showEvent(event)
+        if getattr(self, "_dirty", True):
+            self._dirty = False
+            self._recalc.start()
+
+    def hideEvent(self, event) -> None:  # noqa: N802
+        super().hideEvent(event)
+        self._anim.stop()
+
+    def _job_fn(self):
+        room, speakers, plane = copy.deepcopy(self.room), copy.deepcopy(self.speakers), copy.deepcopy(self.plane)
+        kind, band, fraction = self.view_kind, self.band, self.fraction
+        mode = self._modes[self.cb_mode.currentIndex()] if self._modes and self.cb_mode.currentIndex() >= 0 else None
+        if kind == "mode" and mode is None:
+            kind = "level"
+        with_room = self.chk_room.isChecked()
+        wave_f, xsec = self.sp_wave.value(), self.sp_section.value()
+        planes = copy.deepcopy(self.planes)
+        show_3d = self.view_tabs.currentWidget() is self.view3d
+
+        def fn():
+            res = ra.compute_view(room, speakers, kind, band=band, fraction=fraction, plane=plane,
+                                  wave_freq=wave_f, x_section=xsec, mode=mode, with_room=with_room)
+            if show_3d and kind in ("level", "sti"):     # alle Hörflächen für die 3D-Ansicht
+                res["extra"] = [(p, ra.compute_view(room, speakers, kind, band=band, fraction=fraction, plane=p,
+                                                    with_room=with_room)) for p in [None, *planes] if p is not plane]
+            return res
+        return fn
+
+    def compute(self) -> None:
+        """Im Hintergrund rechnen (bleibt bedienbar, auch bei vielen Lautsprechern)."""
+        if self.band is None:
+            return
+        self._draw_room()
+        self._job += 1
+        w = _Worker(self._job, self._job_fn())
+        w.done.connect(self._computed)
+        w.finished.connect(lambda w=w: self._workers.remove(w) if w in self._workers else None)
+        self._workers.append(w)
+        w.start()
+
+    def compute_now(self) -> None:
+        """Synchron rechnen (Tests, Export)."""
+        self._draw_room()
+        self._job += 1
+        self._computed(self._job, self._job_fn()())
+
+    def _computed(self, job_id: int, result) -> None:
+        if job_id != self._job:
+            return                      # veraltet – neuere Berechnung läuft
+        if isinstance(result, Exception):
+            self.lbl_stats.setText(f"Fehler: {result}")
+            return
+        self.result = result
+        self.map = (result["xs"], result["ys"], result["data"])
+        self._phase = 0.0
+        self._redraw_map()
+        self._update_3d()
+        self._anim_toggled(self.chk_anim.isChecked())
+
     # --- Zeichnen ---------------------------------------------------------------
+    def _set_axes(self, section: bool) -> None:
+        vb = self.plot.getViewBox()
+        vb.invertY(not section)
+        self.plot.setLabel("bottom", "Tiefe y [m] (0 = Bühnenkante)" if section else "Breite x [m]")
+        self.plot.setLabel("left", "Höhe z [m]" if section else "Tiefe y [m] (0 = Bühnenkante)")
+
+    def _draw_room(self) -> None:
+        r = self.room
+        w, length, sd = r.width, r.length, r.stage_depth
+        section = self.view_kind == "wave_section"
+        self._set_axes(section)
+        if section:
+            self.outline.setData([r.y_min, length, length, r.y_min, r.y_min], [0, 0, r.height, r.height, 0])
+            self.stage.setData([r.y_min, length], [r.listen_height, r.listen_height])
+            self.plane_outline.setData([], [])
+            key = ("section", w, length, sd, r.height)
+            rng = dict(xRange=(r.y_min - 1, length + 1), yRange=(-0.5, r.height + 0.5))
+        else:
+            self.outline.setData([0, w, w, 0, 0], [0, 0, length, length, 0])
+            self.stage.setData([0, 0, w, w], [0, -sd, -sd, 0] if sd > 0 else [0, w])
+            px, py = [], []
+            for p in self.planes:
+                px += [p.x0, p.x1, p.x1, p.x1, p.x1, p.x0, p.x0, p.x0]
+                py += [p.y0, p.y0, p.y0, p.y1, p.y1, p.y1, p.y1, p.y0]
+            self.plane_outline.setData(px, py)
+            key = ("top", w, length, sd)
+            rng = dict(xRange=(-1, w + 1), yRange=(-sd - 1, length + 1))
+        if key != getattr(self, "_shown_room", None):    # Ansicht nur bei neuer Geometrie anpassen
+            self._shown_room = key
+            self.plot.setRange(padding=0.02, **rng)
+        self._draw_speakers()
+
     def _draw_speakers(self) -> None:
         for it in self.spk_items:
             self.plot.removeItem(it)
         self.spk_items = []
+        section = getattr(self, "cb_view", None) is not None and self.view_kind == "wave_section"
         for i, sp in enumerate(self.speakers):
             color = "#ff7043" if sp.kind == "sub" else "#4fc3f7"
             if not sp.enabled:
                 color = "#777"
-            t = pg.TargetItem(pos=(sp.x, sp.y), size=13, symbol="s" if sp.kind == "sub" else "t",
-                              pen=pg.mkPen("k", width=1.5), brush=pg.mkBrush(color), movable=True,
+            pos = (sp.y, sp.z) if section else (sp.x, sp.y)
+            t = pg.TargetItem(pos=pos, size=13, symbol="s" if sp.kind == "sub" else "t",
+                              pen=pg.mkPen("k", width=1.5), brush=pg.mkBrush(color), movable=not section,
                               label=sp.name, labelOpts={"color": "#fff", "offset": (8, 4)})
             t.setZValue(30)
-            t.sigPositionChangeFinished.connect(lambda item, i=i: self._speaker_moved(i, item))
+            if not section:
+                t.sigPositionChangeFinished.connect(lambda item, i=i: self._speaker_moved(i, item))
             self.plot.addItem(t)
             self.spk_items.append(t)
             if sp.kind == "top" or sp.cov_h < 360:
-                a = math.radians(sp.azimuth)
-                ln = pg.PlotDataItem([sp.x, sp.x + 1.2 * math.sin(a)], [sp.y, sp.y + 1.2 * math.cos(a)],
-                                     pen=pg.mkPen(color, width=2))
+                a, tl = math.radians(sp.azimuth), math.radians(sp.tilt)
+                if section:
+                    xs_, ys_ = [sp.y, sp.y + 1.2 * math.cos(tl)], [sp.z, sp.z + 1.2 * math.sin(tl)]
+                else:
+                    xs_, ys_ = [sp.x, sp.x + 1.2 * math.sin(a)], [sp.y, sp.y + 1.2 * math.cos(a)]
+                ln = pg.PlotDataItem(xs_, ys_, pen=pg.mkPen(color, width=2))
                 ln.setZValue(29)
                 self.plot.addItem(ln)
                 self.spk_items.append(ln)
@@ -400,77 +801,98 @@ class RoomView(QtWidgets.QWidget):
         p = item.pos()
         sp = self.speakers[i]
         sp.x = round(min(max(p.x(), -5), self.room.width + 5), 2)
-        sp.y = round(min(max(p.y(), -5), self.room.length + 5), 2)
+        sp.y = round(min(max(p.y(), self.room.y_min - 5), self.room.length + 5), 2)
         self._fill_table()
         self.schedule()
 
-    def _draw_room(self) -> None:
-        w, length, sd = self.room.width, self.room.length, self.room.stage_depth
-        self.outline.setData([0, w, w, 0, 0], [0, 0, length, length, 0])
-        self.stage.setData([0, 0, w, w], [0, -sd, -sd, 0] if sd > 0 else [0, w])
-        if (w, length, sd) != getattr(self, "_shown_room", None):    # Ansicht nur bei neuer Raumgröße anpassen
-            self._shown_room = (w, length, sd)
-            self.plot.setRange(xRange=(-1, w + 1), yRange=(-sd - 1, length + 1), padding=0.02)
-
-    def schedule(self) -> None:
-        if hasattr(self, "_recalc"):
-            self._recalc.start()
-
-    def compute(self) -> None:
-        """Karte im Hintergrund rechnen (bleibt bedienbar, auch bei vielen Lautsprechern)."""
-        if self.band is None:
-            return
-        self._draw_room()
-        self._job += 1
-        w = _Worker(self._job, self.room, self.speakers, self.band, self.fraction)
-        w.done.connect(self._computed)
-        w.finished.connect(lambda w=w: self._workers.remove(w) if w in self._workers else None)
-        self._workers.append(w)
-        w.start()
-
-    def compute_now(self) -> None:
-        """Synchron rechnen (Tests, Export)."""
-        self._draw_room()
-        self._job += 1
-        self._computed(self._job, rm.level_map(self.room, self.speakers, self.band, self.fraction))
-
-    def _computed(self, job_id: int, result) -> None:
-        if job_id != self._job:
-            return                      # veraltet – neuere Berechnung läuft
-        if isinstance(result, Exception):
-            self.lbl_stats.setText(f"Fehler: {result}")
-            return
-        self.map = result
-        self._redraw_map()
-
-    def _redraw_map(self) -> None:
-        if self.map is None:
-            return
-        xs, ys, lv = self.map
-        lv = lv + self.sp_offset.value()
-        finite = lv[np.isfinite(lv)]
-        if not len(finite):
-            self.img.clear()
-            self.lbl_stats.setText("Keine aktiven Lautsprecher")
-            self._draw_points()
-            return
-        top = math.ceil(float(finite.max()))
-        lo = top - self.sp_range.value()
-        self.img.setImage(np.nan_to_num(lv, nan=lo), autoLevels=False, levels=(lo, top))
+    def _set_image(self, data, levels, cmap, label) -> None:
+        xs, ys = self.result["xs"], self.result["ys"]
+        self.img.setImage(np.nan_to_num(data, nan=levels[0]), autoLevels=False, levels=levels)
         dx = xs[1] - xs[0] if len(xs) > 1 else 1
         dy = ys[1] - ys[0] if len(ys) > 1 else 1
         self.img.setRect(QtCore.QRectF(xs[0] - dx / 2, ys[0] - dy / 2, xs[-1] - xs[0] + dx, ys[-1] - ys[0] + dy))
-        self.cbar.setLevels((lo, top))
-        self.cbar.axis.setLabel("dB(A)" if self.band == "A" else "dB SPL")
-        u = rm.uniformity(lv[ys >= 0])               # Statistik nur für das Publikum
-        stage = lv[ys < 0]
-        stage_txt = (f"<br>Bühne: Median {np.median(stage):.1f} dB "
-                     f"({np.median(stage) - u['median']:+.1f} dB zum Publikum)" if stage.size else "")
-        self.lbl_stats.setText(
-            f"<b>{self.cb_band.currentText()}</b><br>Median {u['median']:.1f} dB · Min {u['min']:.1f} · "
-            f"Max {u['max']:.1f}<br>±3 dB um den Median auf <b>{100 * u['within']:.0f} %</b> der Fläche"
-            + stage_txt)
+        self.cbar.setColorMap(cmap)
+        self.img.setColorMap(cmap)
+        self.cbar.setLevels(levels)
+        self.cbar.axis.setLabel(label)
+
+    def _redraw_map(self) -> None:
+        if self.result is None:
+            return
+        kind, data = self.result["kind"], self.result["data"]
+        ys = self.result["ys"]
+        if kind == "level":
+            lv = data + self.sp_offset.value()
+            finite = lv[np.isfinite(lv)]
+            if not len(finite):
+                self.img.clear()
+                self.lbl_stats.setText("Keine aktiven Lautsprecher")
+                self._draw_points()
+                return
+            top = math.ceil(float(finite.max()))
+            self._set_image(lv, (top - self.sp_range.value(), top), CMAP, "dB(A)" if self.band == "A" else "dB SPL")
+            aud = lv[ys >= 0] if self.plane is None else lv
+            u = rm.uniformity(aud)
+            stage = lv[ys < 0] if self.plane is None else np.array([])
+            stage_txt = (f"<br>Bühne: Median {np.median(stage):.1f} dB "
+                         f"({np.median(stage) - u['median']:+.1f} dB zum Publikum)" if stage.size else "")
+            room_txt = " · mit Raum" if self.chk_room.isChecked() else " · Direktschall"
+            self.lbl_stats.setText(
+                f"<b>{self.cb_band.currentText()}</b>{room_txt}<br>Median {u['median']:.1f} dB · Min {u['min']:.1f} · "
+                f"Max {u['max']:.1f}<br>±3 dB um den Median auf <b>{100 * u['within']:.0f} %</b> der Fläche"
+                + stage_txt)
+        elif kind == "sti":
+            self._set_image(data, (0.0, 1.0), CMAP_STI, "STI")
+            aud = data[ys >= 0] if self.plane is None else data
+            aud = aud[np.isfinite(aud)]
+            mean = float(np.mean(aud)) if aud.size else float("nan")
+            self.lbl_stats.setText(
+                f"<b>STI-Vorhersage</b> (männliche Sprache, Störgeräusch {self.room.noise_dba:.0f} dB(A))<br>"
+                f"Mittel {mean:.2f} ({sti_rating(mean)}) · Min {aud.min():.2f} · Max {aud.max():.2f}<br>"
+                f"STI ≥ 0,50 auf <b>{100 * np.mean(aud >= 0.5):.0f} %</b> der Fläche "
+                f"(Ziel Sprachalarmanlage: Mittel ≥ 0,50)")
+        elif kind.startswith("wave"):
+            self._set_image(ra.wave_frame(self.result["field"], self._phase), (-1.0, 1.0), CMAP_WAVE, "Schalldruck")
+            lam = rm.C / max(self.sp_wave.value(), 1)
+            self.lbl_stats.setText(f"<b>Wellenbild {self.sp_wave.value():g} Hz</b> · Wellenlänge {lam:.2f} m<br>"
+                                   "Rot = Überdruck, Blau = Unterdruck. Weiße Bereiche ohne Bewegung = Auslöschung.")
+        elif kind == "mode":
+            self._set_image(data, (-30.0, 0.0), CMAP, "dB rel. Maximum")
+            m = self._modes[self.cb_mode.currentIndex()] if self._modes else None
+            if m:
+                self.lbl_stats.setText(
+                    f"<b>Raummode {m['f']:.1f} Hz</b> (Ordnung {m['n'][0]},{m['n'][1]},{m['n'][2]})<br>Rot = Druckbauch "
+                    "(Überhöhung), Blau = Knoten (Loch). Erste Moden: "
+                    + ", ".join(f"{x['f']:.0f}" for x in self._modes[:6]) + " Hz")
         self._draw_points()
+
+    def _animate(self) -> None:
+        if self.result is None or not self.result["kind"].startswith("wave") or not self.isVisible():
+            return
+        self._phase = (self._phase + 2 * math.pi / 30) % (2 * math.pi)
+        self.img.setImage(ra.wave_frame(self.result["field"], self._phase), autoLevels=False, levels=(-1, 1))
+
+    def _update_3d(self) -> None:
+        if self.view_tabs.currentWidget() is not self.view3d or not self.view3d.available or self.result is None:
+            if self.view_tabs.currentWidget() is self.view3d and self.result is not None and "extra" not in self.result \
+                    and self.result["kind"] in ("level", "sti"):
+                self.schedule()   # 3D braucht alle Hörflächen
+            return
+        maps = []
+        kind = self.result["kind"]
+        if kind in ("level", "sti"):
+            entries = [(self.plane, self.result)] + list(self.result.get("extra", []))
+            if kind == "level":
+                allv = np.concatenate([e[1]["data"].ravel() for e in entries]) + self.sp_offset.value()
+                hi = math.ceil(float(np.nanmax(allv)))
+                lo, cmap = hi - self.sp_range.value(), CMAP
+            else:
+                lo, hi, cmap = 0.0, 1.0, CMAP_STI
+            for p, res in entries:
+                d = res["data"] + (self.sp_offset.value() if kind == "level" else 0)
+                maps.append({"xs": res["xs"], "ys": res["ys"], "z": self.room.listen_height if p is None else p.z,
+                             "rgba": _rgba(cmap, d, lo, hi)})
+        self.view3d.show_scene(scene_data(self.room, self.speakers, self.planes, maps, self.points))
 
     # --- Messpunkte ---------------------------------------------------------------------
     def _place_toggled(self, on: bool) -> None:
@@ -504,8 +926,8 @@ class RoomView(QtWidgets.QWidget):
 
     def predicted_at(self, pt: rm.MeasPoint, band=None) -> float:
         band = self.band if band is None else band
-        v = rm.band_level(self.speakers, band, np.array(pt.x), np.array(pt.y),
-                          np.array(self.room.listen_height), self.fraction)
+        v = ra.room_band_level(self.room, self.speakers, band, np.array(pt.x), np.array(pt.y),
+                               np.array(self.room.listen_height), self.fraction, self.chk_room.isChecked())
         return float(v) + self.sp_offset.value()
 
     def spectrum_traces(self) -> list[dict]:
@@ -568,13 +990,20 @@ class RoomView(QtWidgets.QWidget):
         for lab in self.pt_labels:
             self.plot.removeItem(lab)
         self.pt_labels = []
-        self.pts_item.setData([p.x for p in self.points], [p.y for p in self.points])
+        show = self.result is None or (self.result["kind"] in ("level", "sti", "mode") and self.plane is None) \
+            or self.result["kind"] == "wave_top"
+        pts = self.points if show else []
+        self.pts_item.setData([p.x for p in pts], [p.y for p in pts])
+        level_view = self.result is None or self.result["kind"] == "level"
         key = self.band_key() if self.band is not None else None
-        for pt in self.points:
-            pred = self.predicted_at(pt)
-            txt = f"{pt.name}\n{pred:.1f} dB"
-            if key in pt.measured:
-                txt += f" | gem. {pt.measured[key]:.1f} (Δ {pt.measured[key] - pred:+.1f})"
+        for pt in pts:
+            if level_view:
+                pred = self.predicted_at(pt)
+                txt = f"{pt.name}\n{pred:.1f} dB"
+                if key in pt.measured:
+                    txt += f" | gem. {pt.measured[key]:.1f} (Δ {pt.measured[key] - pred:+.1f})"
+            else:
+                txt = pt.name
             lab = pg.TextItem(txt, color="#fff", fill=pg.mkBrush(20, 22, 26, 200), anchor=(0, 1.1))
             lab.setPos(pt.x, pt.y)
             lab.setZValue(25)
@@ -586,21 +1015,28 @@ class RoomView(QtWidgets.QWidget):
     # --- Maus ----------------------------------------------------------------------
     def _mouse_moved(self, pos) -> None:
         vb = self.plot.getViewBox()
-        if self.map is None or not vb.sceneBoundingRect().contains(pos):
+        if self.result is None or not vb.sceneBoundingRect().contains(pos):
             self.hover.hide()
             return
         p = vb.mapSceneToView(pos)
-        xs, ys, lv = self.map
+        xs, ys, data = self.result["xs"], self.result["ys"], self.result["data"]
         if not (xs[0] <= p.x() <= xs[-1] and ys[0] <= p.y() <= ys[-1]):
             self.hover.hide()
             return
         i = int(np.clip(np.searchsorted(ys, p.y()), 0, len(ys) - 1))
         j = int(np.clip(np.searchsorted(xs, p.x()), 0, len(xs) - 1))
-        v = lv[i, j] + self.sp_offset.value()
-        dist = [(math.dist((p.x(), p.y()), (s.x, s.y)), s.name) for s in self.speakers if s.enabled]
-        near = min(dist)[1] if dist else ""
-        self.hover.setText(f"x {p.x():.1f} m · y {p.y():.1f} m · <b>{v:.1f} dB</b>"
-                           + (f"<br><span style='color:#aaa'>nächster Lautsprecher: {near}</span>" if near else ""))
+        kind = self.result["kind"]
+        if kind == "level":
+            val = f"<b>{data[i, j] + self.sp_offset.value():.1f} dB</b>"
+        elif kind == "sti":
+            val = f"<b>STI {data[i, j]:.2f}</b> ({sti_rating(float(data[i, j]))})"
+        elif kind.startswith("wave"):
+            val = f"<b>{20 * np.log10(abs(self.result['field'][i, j]) + 1e-12):.1f} dB</b>"
+        else:
+            val = f"<b>{data[i, j]:.1f} dB</b> rel."
+        coords = (f"y {p.x():.1f} m · z {p.y():.1f} m" if kind == "wave_section"
+                  else f"x {p.x():.1f} m · y {p.y():.1f} m")
+        self.hover.setText(f"{coords} · {val}")
         self.hover.adjustSize()
         wp = self.plot.mapFromScene(pos)
         self.hover.move(min(int(wp.x()) + 14, self.plot.width() - self.hover.width() - 4), max(0, int(wp.y()) - 30))
@@ -609,16 +1045,23 @@ class RoomView(QtWidgets.QWidget):
 
     # --- Sitzung -----------------------------------------------------------------------
     def get_state(self) -> tuple[dict, dict]:
-        return {"model": rm.to_dict(self.room, self.speakers, self.points), "controls": controls_state(self)}, {}
+        return {"model": rm.to_dict(self.room, self.speakers, self.points, self.planes),
+                "controls": controls_state(self)}, {}
 
     def set_state(self, meta: dict, arrays: dict) -> None:
         if meta.get("model"):
             self.room, self.speakers, self.points = rm.from_dict(meta["model"])
+            self.planes = rm.planes_from_dict(meta["model"])
         else:
             self.room = rm.Room()
-            self.speakers, self.points = example_setup(self.room), []
+            self.speakers, self.points, self.planes = example_setup(self.room), [], []
+        room = copy.deepcopy(self.room)
         apply_controls_state(self, meta.get("controls", {}))
+        self.room = room                       # Modell hat Vorrang vor den gespeicherten Feldern
         self._fill_room_spins()
+        self._fill_planes()
+        self._fill_modes()
+        self._update_rt_label()
         self._fill_table()
         self._refresh_points()
-        self.schedule()
+        self._view_changed()

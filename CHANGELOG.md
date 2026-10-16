@@ -14,6 +14,9 @@ Veröffentlichen den Abschnitt der neuen Version und übernimmt ihn als Patch No
 ### Neu
 - Neuer Modus **Raum** (Taste 4): Lautsprecher im Raum planen, Pegelkarte der Hörfläche je Frequenzband oder A-bewertet, Sub-Setups (L/R, Mitte, Broadside, Arc, Endfire, Cardioid) mit automatischen Delays, Bühnenpegel, Messpunkte mit Vergleich Messung ↔ Vorhersage
 - Wiki-Seite „Raum“
+- Raum: Reflexionen 1. Ordnung, Nachhall (aus der Impulsantwort-Messung übernehmen oder nach Sabine berechnen), STI-Karte mit Störgeräusch
+- Raum: animiertes Wellenbild in Draufsicht und Längsschnitt, Raummoden bis 250 Hz
+- Raum: 3D-Ansicht zum Drehen, weitere Hörflächen (z. B. Empore), Import gemessener Abstrahlung (Polardaten als CSV)
 
 ## [0.5.0-beta.5] - 2026-10-16
 
