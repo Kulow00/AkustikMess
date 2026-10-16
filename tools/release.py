@@ -630,7 +630,7 @@ def cmd_publish(args) -> None:
     notes = changelog_sections(CHANGELOG.read_text(encoding="utf-8")).get(version, "")
     today = dt.date.today().isoformat()
     dl_dir = BUILD_DIR / "github" / version
-    for plat in sorted(assets):
+    for plat in sorted(wanted):  # nur die angeforderten Plattformen übernehmen
         a = assets[plat]
         path = download_file(a["browser_download_url"], dl_dir / a["name"])
         digest = (a.get("digest") or "").removeprefix("sha256:")
@@ -733,7 +733,7 @@ def main(argv=None) -> int:
     p = sub.add_parser("publish", help="Signierte Installer vom GitHub-Release veröffentlichen")
     p.add_argument("--version", help="Standard: Version im Quelltext")
     p.add_argument("--platform", action="append", choices=["windows", "macos"],
-                   help="erforderliche Plattformen (Standard: windows; mehrfach möglich)")
+                   help="zu übernehmende Plattformen (Standard: windows; mehrfach möglich)")
     p.add_argument("--wait", action="store_true", help="warten, bis GitHub fertig gebaut und signiert hat")
     p.add_argument("--timeout", type=int, default=180, help="Minuten für --wait (Standard 180)")
     p.add_argument("--allow-unsigned", action="store_true", help="nur zum Testen: unsignierten Installer zulassen")
