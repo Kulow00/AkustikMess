@@ -11,6 +11,8 @@ Veröffentlichen den Abschnitt der neuen Version und übernimmt ihn als Patch No
 
 ## [Unreleased]
 
+## [0.5.0-beta.3] - 2026-10-16
+
 ### Neu
 - AkustikMess ist Open Source (GNU GPL 3.0 oder neuer)
 - Hilfe → Über AkustikMess zeigt Urheber, Lizenz und Gewährleistungsausschluss
