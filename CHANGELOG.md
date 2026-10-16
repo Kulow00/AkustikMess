@@ -11,8 +11,18 @@ Veröffentlichen den Abschnitt der neuen Version und übernimmt ihn als Patch No
 
 ## [Unreleased]
 
+### Neu
+- Darstellungsbereich in der Seitenleiste einstellbar: Frequenz von/bis, Pegelbereich für Spektrum und Betrag; folgt auch dem Zoomen mit der Maus
+
 ### Verbessert
 - Fadenkreuz zeigt die Messwerte live an, auch wenn die Maus im Diagramm stillsteht
+- Generator einschalten startet das Audio automatisch; Hinweis, wenn kein Ausgangsgerät gewählt ist
+- Audio-Einstellungen schlagen immer ein Ausgangsgerät vor (gleiches Gerät oder System-Standard)
+
+### Behoben
+- Generator spielte teilweise nicht ab, wenn Ein- und Ausgang verschiedene Geräte sind (z. B. macOS: eingebautes Mikrofon + Lautsprecher)
+- Übertragungsfunktion und Phase hatten regelmäßig Lücken: das Ausblenden bei geringer Kohärenz bewertet jetzt Bereiche statt Einzelpunkte
+- Zoom im Spektrum ist auf −150 dB begrenzt
 
 ## [0.5.0-beta.4] - 2026-10-16
 

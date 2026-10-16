@@ -23,6 +23,11 @@ MTW = "MTW (Multi-Time-Window)"
 BANDINGS = {"Schmalband (FFT)": 0, "1/1 Oktave": 1, "1/3 Oktave": 3, "1/6 Oktave": 6,
             "1/12 Oktave": 12, "1/24 Oktave": 24, "1/48 Oktave": 48}
 SMOOTHING = {"keine": 0, "1/48 Okt.": 48, "1/24 Okt.": 24, "1/12 Okt.": 12, "1/6 Okt.": 6, "1/3 Okt.": 3}
+SPEC_FLOOR_DB = -150.0    # tiefster darstellbarer Pegel im Spektrum (relativ zu 0 dBFS)
+SPEC_CEIL_DB = 30.0
+MAG_LIMIT_DB = 150.0
+BLANK_SMOOTH_OCT = 1 / 6  # Kohärenz für das Ausblenden über 1/6 Oktave glätten
+BLANK_MIN_GAP_OCT = 1 / 24  # schmalere Lücken werden nicht ausgeblendet (kein Flackern)
 AVERAGES = {"keine": (1, False), "2": (2, False), "4": (4, False), "8": (8, False), "16": (16, False),
             "32": (32, False), "Exp. langsam": (32, True), "Exp. schnell": (6, True)}
 
@@ -110,6 +115,42 @@ class RealtimeView(QtWidgets.QWidget):
         top.addWidget(self.cb_layout, 1)
         form_lay.addLayout(top)
 
+        g_view = QtWidgets.QGroupBox("Darstellungsbereich")
+        f = QtWidgets.QFormLayout(g_view)
+
+        def spin(lo, hi, val, suffix, step, decimals=0):
+            s = QtWidgets.QDoubleSpinBox(minimum=lo, maximum=hi, value=val, decimals=decimals,
+                                         singleStep=step, suffix=suffix)
+            s.setKeyboardTracking(False)  # erst nach Eingabe übernehmen, nicht bei jeder Ziffer
+            return s
+
+        self.sp_view_f_lo = spin(5, 40000, 20, " Hz", 10)
+        self.sp_view_f_hi = spin(10, 48000, 20000, " Hz", 1000)
+        self.sp_view_spec_top = spin(-150, 200, 0, " dB", 6)
+        self.sp_view_spec_bot = spin(-150, 200, -120, " dB", 6)
+        self.sp_view_mag_top = spin(-MAG_LIMIT_DB, MAG_LIMIT_DB, 20, " dB", 3)
+        self.sp_view_mag_bot = spin(-MAG_LIMIT_DB, MAG_LIMIT_DB, -40, " dB", 3)
+        row = QtWidgets.QHBoxLayout()
+        row.addWidget(self.sp_view_f_lo)
+        row.addWidget(QtWidgets.QLabel("–"))
+        row.addWidget(self.sp_view_f_hi)
+        f.addRow("Frequenz", row)
+        f.addRow("Spektrum oben", self.sp_view_spec_top)
+        f.addRow("Spektrum unten", self.sp_view_spec_bot)
+        f.addRow("Betrag oben", self.sp_view_mag_top)
+        f.addRow("Betrag unten", self.sp_view_mag_bot)
+        btn_view = QtWidgets.QPushButton("Standardbereich")
+        btn_view.setToolTip("Frequenz 20 Hz – 20 kHz, Spektrum 120 dB, Betrag −40 … +20 dB")
+        btn_view.clicked.connect(self.reset_view_range)
+        f.addRow(btn_view)
+        for s in (self.sp_view_f_lo, self.sp_view_f_hi, self.sp_view_spec_top, self.sp_view_spec_bot,
+                  self.sp_view_mag_top, self.sp_view_mag_bot):
+            s.valueChanged.connect(self._apply_view_range)
+        # Zoomen/Verschieben mit der Maus aktualisiert die Felder
+        self.p_spec.getPlotItem().getViewBox().sigRangeChanged.connect(self._sync_view_spins)
+        self.p_mag.getPlotItem().getViewBox().sigRangeChanged.connect(self._sync_view_spins)
+        form_lay.addWidget(g_view)
+
         g_spec = QtWidgets.QGroupBox("Spektrum")
         f = QtWidgets.QFormLayout(g_spec)
         self.cb_spec_ch = channel_combo(2, 0)
@@ -144,7 +185,7 @@ class RealtimeView(QtWidgets.QWidget):
         self.btn_delay = QtWidgets.QPushButton("Laufzeit finden")
         self.btn_delay.clicked.connect(self.find_delay)
         # MTW bewertet Hall im Hochton ehrlich als unkorreliert → niedrigere Schwelle als bei fester FFT
-        self.sp_coh = QtWidgets.QDoubleSpinBox(decimals=2, maximum=1.0, singleStep=0.05, value=0.3)
+        self.sp_coh = QtWidgets.QDoubleSpinBox(decimals=2, maximum=1.0, singleStep=0.05, value=0.2)
         self.chk_blank = QtWidgets.QCheckBox("Ausblenden unter Kohärenz-Schwelle")
         self.chk_blank.setChecked(True)
         f.addRow("Referenz", self.cb_ref)
@@ -227,7 +268,65 @@ class RealtimeView(QtWidgets.QWidget):
         self.target_points: list | None = None
         self.target_file_points: list | None = None
         self.relative_ref: dict | None = None
+        self._spec_offset: float | None = None
+        self._syncing = False
+        self._coh_hist = None
+        self._set_spec_limits(0.0)
+        self.p_mag.getPlotItem().getViewBox().setLimits(yMin=-MAG_LIMIT_DB, yMax=MAG_LIMIT_DB)
         name_controls(self)
+
+    # --- Darstellungsbereich -----------------------------------------------------
+    def _set_spec_limits(self, offset: float) -> None:
+        """Zoom im Spektrum höchstens bis −150 dB (bzw. Kalibrierwert − 150 dB SPL)."""
+        lo, hi = offset + SPEC_FLOOR_DB, offset + SPEC_CEIL_DB + 120
+        self.p_spec.getPlotItem().getViewBox().setLimits(yMin=lo, yMax=hi)
+        for s in (self.sp_view_spec_top, self.sp_view_spec_bot):
+            s.blockSignals(True)
+            s.setRange(lo, hi)
+            s.blockSignals(False)
+
+    def _apply_view_range(self) -> None:
+        if self._syncing:
+            return
+        f_lo, f_hi = self.sp_view_f_lo.value(), self.sp_view_f_hi.value()
+        s_bot, s_top = self.sp_view_spec_bot.value(), self.sp_view_spec_top.value()
+        m_bot, m_top = self.sp_view_mag_bot.value(), self.sp_view_mag_top.value()
+        self._syncing = True  # Rückmeldungen der Plots erst am Ende übernehmen
+        try:
+            if f_hi > f_lo * 1.05:
+                self.p_mag.setXRange(np.log10(f_lo), np.log10(f_hi), padding=0)  # alle Plots gekoppelt
+            if s_top > s_bot:
+                self.p_spec.setYRange(s_bot, s_top, padding=0)
+            if m_top > m_bot:
+                self.p_mag.setYRange(m_bot, m_top, padding=0)
+        finally:
+            self._syncing = False
+        self._sync_view_spins()  # z. B. auf −150 dB begrenzte Werte anzeigen
+
+    def _sync_view_spins(self, *_):
+        if self._syncing:
+            return
+        self._syncing = True
+        try:
+            _, (s0, s1) = self.p_spec.getPlotItem().getViewBox().viewRange()
+            (x0, x1), (m0, m1) = self.p_mag.getPlotItem().getViewBox().viewRange()  # Frequenz führt p_mag
+            for s, v in ((self.sp_view_f_lo, 10 ** x0), (self.sp_view_f_hi, 10 ** x1),
+                         (self.sp_view_spec_bot, s0), (self.sp_view_spec_top, s1),
+                         (self.sp_view_mag_bot, m0), (self.sp_view_mag_top, m1)):
+                s.blockSignals(True)
+                s.setValue(round(v, s.decimals()))
+                s.blockSignals(False)
+        finally:
+            self._syncing = False
+
+    def reset_view_range(self) -> None:
+        off = self._spec_offset or 0.0
+        self._syncing = True
+        for s, v in ((self.sp_view_f_lo, 20), (self.sp_view_f_hi, 20000), (self.sp_view_spec_top, off),
+                     (self.sp_view_spec_bot, off - 120), (self.sp_view_mag_top, 20), (self.sp_view_mag_bot, -40)):
+            s.setValue(v)
+        self._syncing = False
+        self._apply_view_range()
 
     def _apply_layout(self) -> None:
         mode = self.cb_layout.currentText()
@@ -257,12 +356,20 @@ class RealtimeView(QtWidgets.QWidget):
         self.peak_hold = None
         cal = self.state.calibration_for(self.cb_spec_ch.currentData() or 0)
         self.p_spec.setLabel("left", "dB SPL" if cal is not None else "dBFS")
-        if cal is not None:
-            self.p_spec.setYRange(cal - 120, cal, padding=0)
-        else:
-            self.p_spec.setYRange(-120, 0, padding=0)
+        offset = cal if cal is not None else 0.0
+        if offset != self._spec_offset:
+            shift = offset - (self._spec_offset or 0.0)
+            top, bot = self.sp_view_spec_top.value() + shift, self.sp_view_spec_bot.value() + shift
+            self._spec_offset = offset
+            self._set_spec_limits(offset)   # erst Grenzen verschieben, dann Werte (sonst abgeschnitten)
+            self._syncing = True
+            self.sp_view_spec_top.setValue(top)
+            self.sp_view_spec_bot.setValue(bot)
+            self._syncing = False
+            self._apply_view_range()
 
     def _reset_tf(self) -> None:
+        self._coh_hist = None
         fft = self.cb_tf_fft.currentData()
         count, exp = AVERAGES[self.cb_tf_avg.currentText()]
         if fft == MTW:
@@ -301,7 +408,10 @@ class RealtimeView(QtWidgets.QWidget):
             self._update_tf(eng)
         ms = 1000 * (time.perf_counter() - t0)
         if eng.xruns:
-            self.status.setText(f"Rechenzeit {ms:.0f} ms · Aussetzer: {eng.xruns}")
+            under = getattr(eng, "output_underruns", 0)
+            hint = (f" · Ausgabe {under}× zu spät – unter Audio-Einstellungen eine größere Blockgröße wählen"
+                    if under else "")
+            self.status.setText(f"Rechenzeit {ms:.0f} ms · Aussetzer: {eng.xruns}{hint}")
 
     def _spectrum_db(self, freqs, power, cal):
         offset = cal if cal is not None else 0.0
@@ -387,7 +497,7 @@ class RealtimeView(QtWidgets.QWidget):
         fd, d = log_decimate(f, mag=("mean", mag), phase=("phase", phase), coh=("mean", coh))
         mag, phase, coh = d["mag"], d["phase"], d["coh"]
         if self.chk_blank.isChecked():
-            bad = coh < self.sp_coh.value()
+            bad = self._blank_mask(fd, coh, self.sp_coh.value())
             mag = np.where(bad, np.nan, mag)
             phase = np.where(bad, np.nan, phase)
         self.c_mag.setData(fd, mag)
@@ -401,6 +511,32 @@ class RealtimeView(QtWidgets.QWidget):
             else:
                 res_txt = f"Auflösung {eng.fs / n:.2f} Hz"
             self.status.setText(f"Laufzeit-Kompensation {self.sp_delay.value():.2f} ms · {res_txt}")
+
+    def _blank_mask(self, fd: np.ndarray, coh: np.ndarray, threshold: float) -> np.ndarray:
+        """Wo die Kurve ausgeblendet wird.
+
+        Statt jedes einzelnen Punktes zählt die über 1/6 Oktave geglättete und über die letzten
+        Bilder gemittelte Kohärenz; Lücken schmaler als 1/24 Oktave entfallen. So verschwinden
+        nur wirklich unbrauchbare Bereiche, die Kurve flackert nicht und hat keine Aussetzer.
+        """
+        lf = np.log2(np.maximum(fd, 1e-9))
+        c = np.nan_to_num(coh, nan=0.0)
+        if len(lf) > 2:
+            cs = np.concatenate([[0.0], np.cumsum(c)])
+            lo = np.searchsorted(lf, lf - BLANK_SMOOTH_OCT / 2)
+            hi = np.searchsorted(lf, lf + BLANK_SMOOTH_OCT / 2, side="right")
+            c = (cs[hi] - cs[lo]) / np.maximum(hi - lo, 1)
+        if self._coh_hist is not None and self._coh_hist.shape == c.shape:
+            c = 0.6 * self._coh_hist + 0.4 * c          # zeitliche Beruhigung
+        self._coh_hist = c
+        bad = c < threshold
+        # schmale Lücken (< 1/24 Oktave) schließen
+        if bad.any() and len(lf) > 2:
+            edges = np.flatnonzero(np.diff(np.concatenate([[0], bad.astype(int), [0]])))
+            for a, b in zip(edges[::2], edges[1::2]):
+                if lf[min(b, len(lf) - 1)] - lf[a] < BLANK_MIN_GAP_OCT:
+                    bad[a:b] = False
+        return bad
 
     # --- Zielkurve ----------------------------------------------------------------
     def _target_selected(self) -> None:

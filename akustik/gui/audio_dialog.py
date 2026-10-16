@@ -58,17 +58,36 @@ class AudioDialog(QtWidgets.QDialog):
         self.cb_api.setCurrentIndex(max(0, self.cb_api.findText(api)))
         self._api_changed()
         self._select(self.cb_in, config.input_device)
-        self._select(self.cb_out, config.output_device)
+        if not self._select(self.cb_out, config.output_device):
+            self._default_output()
         self.cb_rate.setCurrentIndex(max(0, self.cb_rate.findData(config.samplerate)))
         self.cb_block.setCurrentIndex(max(0, self.cb_block.findData(config.blocksize)))
         self.sp_in.setValue(config.input_channels)
         self.sp_out.setValue(config.output_channels)
 
     @staticmethod
-    def _select(cb: QtWidgets.QComboBox, name) -> None:
-        i = cb.findData(name)
+    def _select(cb: QtWidgets.QComboBox, name) -> bool:
+        i = cb.findData(name) if name is not None else -1
         if i >= 0:
             cb.setCurrentIndex(i)
+        return i >= 0
+
+    def _default_output(self) -> None:
+        """Ausgang vorschlagen: gleiches Gerät wie der Eingang, sonst der Standard-Ausgang des Systems.
+
+        Ohne Ausgang spielt der Generator nichts ab – das soll nie unbemerkt passieren.
+        """
+        if self.cb_api.currentText() == SIMULATION:
+            return
+        if self._select(self.cb_out, self.cb_in.currentData()):
+            return
+        try:
+            import sounddevice as sd  # noqa: PLC0415
+            name = sd.query_devices(kind="output")["name"]
+        except Exception:  # noqa: BLE001
+            name = None
+        if not self._select(self.cb_out, name) and self.cb_out.count() > 1:
+            self.cb_out.setCurrentIndex(1)  # erstes echtes Ausgabegerät
 
     def _api_changed(self) -> None:
         api = self.cb_api.currentText()
@@ -87,6 +106,7 @@ class AudioDialog(QtWidgets.QDialog):
                     self.cb_in.addItem(f"{d['name']}  ({d['inputs']} Eingänge)", d["name"])
                 if d["outputs"]:
                     self.cb_out.addItem(f"{d['name']}  ({d['outputs']} Ausgänge)", d["name"])
+            self._default_output()
         for w in (self.cb_in, self.cb_out, self.sp_in, self.sp_out, self.cb_block):
             w.setEnabled(not sim)
         self._limits()

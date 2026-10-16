@@ -396,10 +396,24 @@ class MainWindow(QtWidgets.QMainWindow):
         self.a_gen.setText("Generator AUS" if on else "Generator EIN")
         self._style_mute(on)
         if eng is None:
+            if on and not self.a_run.isChecked():
+                self.a_run.setChecked(True)   # Generator einschalten startet auch das Audio
             return
         name = self.cb_gen.currentText()
         if not on or name == "Aus":
             eng.set_generator(None, [])
+            return
+        if not eng.has_output:
+            self.statusBar().showMessage("Generator: kein Ausgangsgerät gewählt – bitte unter "
+                                         "Audio-Einstellungen… einen Ausgang wählen.", 8000)
+            QtWidgets.QMessageBox.warning(
+                self, "Generator", "Es ist kein Ausgangsgerät gewählt, daher kann der Generator nichts "
+                "abspielen.\n\nBitte unter „Audio-Einstellungen…“ ein Ausgangsgerät wählen.")
+            self.a_gen.blockSignals(True)
+            self.a_gen.setChecked(False)
+            self.a_gen.blockSignals(False)
+            self.a_gen.setText("Generator EIN")
+            self._style_mute(False)
             return
         cls = GENERATORS[name]
         level = min(self.sp_gen_level.value(), self.state.level_limit_db)

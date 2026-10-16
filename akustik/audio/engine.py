@@ -114,6 +114,7 @@ class BaseEngine:
         self.running = False
         self.peak = np.zeros(config.input_channels)  # letzte Spitzenwerte je Kanal
         self.xruns = 0
+        self.output_underruns = 0       # Ausgabe kam zu spät → hörbare Aussetzer im Generator
 
     # --- im Audio-Thread ---------------------------------------------------
     def _render_output(self, frames: int, nch: int) -> np.ndarray:
@@ -221,21 +222,31 @@ class AudioEngine(BaseEngine):
         import sounddevice as sd  # erst hier, damit Tests ohne PortAudio laufen
         self._sd = sd
         self._stream = None
+        self._out_stream = None
+        self.duplex = True
 
     @property
     def has_output(self) -> bool:
         return self.config.output_device is not None
 
-    def _callback_duplex(self, indata, outdata, frames, time_info, status):
+    def _count(self, status) -> None:
         if status:
             self.xruns += 1
+            if status.output_underflow:
+                self.output_underruns += 1
+
+    def _callback_duplex(self, indata, outdata, frames, time_info, status):
+        self._count(status)
         self._on_input(indata.copy())
         outdata[:] = self._render_output(frames, outdata.shape[1])
 
     def _callback_input(self, indata, frames, time_info, status):
-        if status:
-            self.xruns += 1
+        self._count(status)
         self._on_input(indata.copy())
+
+    def _callback_output(self, outdata, frames, time_info, status):
+        self._count(status)
+        outdata[:] = self._render_output(frames, outdata.shape[1])
 
     def _resolve(self, name: str, kind: str) -> int:
         """Gerätename + Host-API → eindeutiger PortAudio-Index."""
@@ -247,29 +258,50 @@ class AudioEngine(BaseEngine):
         raise ValueError(f"Gerät nicht gefunden: {name} ({self.config.host_api})")
 
     def start(self) -> None:
+        """Gleiches Gerät für Ein- und Ausgang → ein Vollduplex-Stream (sample-genau).
+
+        Verschiedene Geräte (z. B. unter macOS „MacBook-Mikrofon“ + „MacBook-Lautsprecher“ oder
+        USB-Mikrofon + Kopfhörer) laufen als zwei getrennte Streams: Ein gemeinsamer Stream über
+        zwei Geräte mit eigenen Taktquellen bleibt bei Core Audio teilweise stumm oder stockt.
+        Für die Impulsantwort gleicht dann die Loopback-Referenz die Latenz aus.
+        """
         c = self.config
         dev_in = self._resolve(c.input_device, "input")
-        if self.has_output:
-            dev_out = self._resolve(c.output_device, "output")
-            self._stream = self._sd.Stream(
-                samplerate=c.samplerate, blocksize=c.blocksize,
-                device=(dev_in, dev_out),
-                channels=(c.input_channels, c.output_channels),
-                dtype="float32", callback=self._callback_duplex, latency="low")
-        else:
-            self._stream = self._sd.InputStream(
-                samplerate=c.samplerate, blocksize=c.blocksize, device=dev_in,
-                channels=c.input_channels, dtype="float32",
-                callback=self._callback_input, latency="low")
-        self._stream.start()
+        common = dict(samplerate=c.samplerate, blocksize=c.blocksize, dtype="float32", latency="low")
+        streams = []
+        try:
+            if self.has_output:
+                dev_out = self._resolve(c.output_device, "output")
+                self.duplex = dev_in == dev_out
+                if self.duplex:
+                    streams.append(self._sd.Stream(device=(dev_in, dev_out),
+                                                   channels=(c.input_channels, c.output_channels),
+                                                   callback=self._callback_duplex, **common))
+                else:
+                    streams.append(self._sd.InputStream(device=dev_in, channels=c.input_channels,
+                                                        callback=self._callback_input, **common))
+                    streams.append(self._sd.OutputStream(device=dev_out, channels=c.output_channels,
+                                                         callback=self._callback_output, **common))
+            else:
+                streams.append(self._sd.InputStream(device=dev_in, channels=c.input_channels,
+                                                    callback=self._callback_input, **common))
+            for s in streams:
+                s.start()
+        except Exception:
+            for s in streams:
+                s.close()
+            raise
+        self._stream = streams[0]
+        self._out_stream = streams[1] if len(streams) > 1 else None
         self.running = True
 
     def stop(self) -> None:
         self.running = False
-        if self._stream is not None:
-            self._stream.stop()
-            self._stream.close()
-            self._stream = None
+        for s in (self._out_stream, self._stream):
+            if s is not None:
+                s.stop()
+                s.close()
+        self._stream = self._out_stream = None
 
 
 class SimulatedEngine(BaseEngine):
