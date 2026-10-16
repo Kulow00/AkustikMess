@@ -51,6 +51,15 @@ footer{margin-top:24px;text-align:center;line-height:1.8}footer a{color:var(--ac
 
   <div class="card notes"><h2 style="margin-top:0">Neuerungen</h2><div id="notes">–</div></div>
 
+  <div class="card" id="issues" hidden>
+    <h2 style="margin-top:0">Fehler gefunden oder eine Idee?</h2>
+    <p style="margin:0 0 12px">Alle Fehlermeldungen und Vorschläge werden gesammelt auf GitHub erfasst und dort
+      ausgewertet. Bitte gib Betriebssystem, AkustikMess-Version (Hilfe → Über AkustikMess), Audio-Interface und
+      die Schritte an, die zum Fehler führen. Für eine Meldung ist ein kostenloses GitHub-Konto nötig.</p>
+    <a class="primary" id="issueNew" href="#">Fehler melden</a>
+    <div class="meta"><a id="issueList" href="#" style="color:var(--accent)">Bekannte Fehler und offene Meldungen ansehen</a></div>
+  </div>
+
   <footer class="hint" id="foot" data-repo="__GITHUB_REPO__">
     © 2026 Alex Kulow · Open Source unter GPL-3.0.
     <span id="links"></span><br>
@@ -127,7 +136,10 @@ function render(){
   const gh="https://github.com/"+repo,doc=gh+"/blob/main/";
   document.getElementById("links").innerHTML=[["Quellcode",gh],["Lizenz",doc+"LICENSE"],
     ["Code-Signatur &amp; Datenschutz",doc+"docs/code-signing-policy.md"],["Fremdkomponenten",doc+"docs/THIRD-PARTY-NOTICES.md"]]
-    .map(([t,u])=>'<a href="'+esc(u)+'">'+t+"</a>").join(" · ")})();
+    .map(([t,u])=>'<a href="'+esc(u)+'">'+t+"</a>").join(" · ");
+  document.getElementById("issueNew").href=gh+"/issues/new/choose";
+  document.getElementById("issueList").href=gh+"/issues";
+  document.getElementById("issues").hidden=false})();
 document.getElementById("tStable").onclick=()=>{channel="stable";render()};
 document.getElementById("tBeta").onclick=()=>{channel="beta";render()};
 fetch("releases.json",{cache:"no-store"}).then(r=>r.json()).then(o=>{data=JSON.parse(o.signed);

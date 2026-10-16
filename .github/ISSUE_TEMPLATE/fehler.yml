@@ -1,0 +1,46 @@
+name: Fehler melden
+description: Etwas funktioniert nicht wie erwartet
+labels: ["fehler"]
+body:
+  - type: textarea
+    id: was
+    attributes:
+      label: Was ist passiert?
+      description: Was hast du erwartet, und was ist stattdessen passiert?
+    validations:
+      required: true
+  - type: textarea
+    id: schritte
+    attributes:
+      label: Schritte zum Nachstellen
+      placeholder: |
+        1. Audio-Einstellungen → …
+        2. Modus Echtzeit, Generator EIN
+        3. …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: AkustikMess-Version
+      description: Hilfe → Über AkustikMess
+      placeholder: z. B. 0.5.0-beta.3
+    validations:
+      required: true
+  - type: dropdown
+    id: system
+    attributes:
+      label: Betriebssystem
+      options: ["Windows 11", "Windows 10", "macOS", "anderes"]
+    validations:
+      required: true
+  - type: input
+    id: interface
+    attributes:
+      label: Audio-Interface und Treiber
+      placeholder: z. B. Focusrite Scarlett 2i2, ASIO
+  - type: textarea
+    id: anhang
+    attributes:
+      label: Screenshots, Fehlermeldungen, Sitzungsdatei
+      description: Bilder oder eine .akmess-Datei hier hineinziehen (optional).

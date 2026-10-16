@@ -1,0 +1,11 @@
+name: Idee oder Wunsch
+description: Vorschlag für eine neue Funktion oder Verbesserung
+labels: ["idee"]
+body:
+  - type: textarea
+    id: idee
+    attributes:
+      label: Was wünschst du dir?
+      description: Beschreibe die Funktion und in welcher Messsituation sie dir hilft.
+    validations:
+      required: true
