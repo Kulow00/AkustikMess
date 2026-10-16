@@ -8,7 +8,7 @@ Zwei Aussteller, damit ein kompromittierter Webserver keine Bezahl-Lizenzen fäl
 
 # Öffentliche Ed25519-Schlüssel (Base64). Leer = Aussteller nicht eingerichtet.
 ROOT_PUBLIC_KEY = "3noY7S+nGCDG7uyWN+ghKhKvbWEbqQ69x9NTYCo347g="
-SERVER_PUBLIC_KEY = ""
+SERVER_PUBLIC_KEY = "pXmPFyTv9x/dMffuh2PlvEpQCLRQ9ohPDhvQqGUQua4="
 
 # Pläne, die der Lizenzserver selbstständig ausstellen darf
 SERVER_PLANS = ("community",)
