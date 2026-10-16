@@ -1,0 +1,5 @@
+# Nur für Entwicklung und Veröffentlichung (nicht im ausgelieferten Programm)
+-r requirements.txt
+pytest>=8
+pyinstaller>=6.6
+paramiko>=3.4

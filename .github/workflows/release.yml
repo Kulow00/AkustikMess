@@ -1,0 +1,148 @@
+# Baut, signiert und veröffentlicht ein Release, sobald ein Tag "v*" gepusht wird
+# (das macht `python tools/release.py release --channel …`).
+#
+# Ablauf Windows:
+#   Tests → Programm bauen → AkustikMess.exe von SignPath signieren lassen → Installer bauen
+#   → Installer von SignPath signieren lassen → GitHub-Release mit Patch Notes anlegen
+# macOS: .pkg bauen (noch unsigniert) und an dasselbe Release hängen.
+#
+# Signiert wird nur, wenn das Secret SIGNPATH_API_TOKEN gesetzt ist (siehe docs/signpath-einrichtung.md);
+# sonst entsteht ein unsigniertes Release. SignPath fordert für jede Signatur eine Freigabe an.
+#
+# Das Release-Verzeichnis auf akmess.alex-kulow.de wird NICHT hier signiert: der private
+# Update-Schlüssel bleibt auf deinem Rechner (`python tools/release.py publish --wait`).
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write   # GitHub-Release anlegen
+  actions: read     # SignPath holt die Artefakte dieses Laufs
+
+env:
+  PYTHONUTF8: "1"
+  QT_QPA_PLATFORM: offscreen
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 360
+    env:
+      SIGNING: ${{ secrets.SIGNPATH_API_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Abhängigkeiten
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Tag und Programmversion vergleichen
+        shell: bash
+        run: |
+          v=$(python -c "import akustik; print(akustik.__version__)")
+          if [ "v$v" != "$GITHUB_REF_NAME" ]; then echo "Tag $GITHUB_REF_NAME passt nicht zu Version $v"; exit 1; fi
+          echo "VERSION=$v" >> "$GITHUB_ENV"
+
+      - name: Tests
+        run: python -m pytest -q tests
+
+      - name: Programm bauen
+        run: python tools/release.py build --stage app --skip-tests
+
+      - name: Programmdatei für SignPath bereitstellen
+        id: app-unsigned
+        if: env.SIGNING == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-unsigned
+          path: dist/AkustikMess/AkustikMess.exe
+          if-no-files-found: error
+
+      - name: Programmdatei signieren (SignPath)
+        if: env.SIGNING == 'true'
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'akustikmess' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: app
+          github-artifact-id: ${{ steps.app-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 14400
+          output-artifact-directory: signed-app
+
+      - name: Signierte Programmdatei übernehmen
+        if: env.SIGNING == 'true'
+        shell: bash
+        run: cp -f signed-app/AkustikMess.exe dist/AkustikMess/AkustikMess.exe
+
+      - name: Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Installer bauen
+        run: python tools/release.py build --stage installer --skip-tests
+
+      - name: Installer für SignPath bereitstellen
+        id: setup-unsigned
+        if: env.SIGNING == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-unsigned
+          path: release_build/AkustikMess-${{ env.VERSION }}-Windows-Setup.exe
+          if-no-files-found: error
+
+      - name: Installer signieren (SignPath)
+        if: env.SIGNING == 'true'
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'akustikmess' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: installer
+          github-artifact-id: ${{ steps.setup-unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 14400
+          output-artifact-directory: signed-setup
+
+      - name: GitHub-Release anlegen
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          name="AkustikMess-$VERSION-Windows-Setup.exe"
+          if [ "$SIGNING" = "true" ]; then setup="signed-setup/$name"; else setup="release_build/$name"; fi
+          python tools/release.py notes --version "$VERSION" > notes.md
+          pre=""; case "$VERSION" in *-*) pre="--prerelease";; esac
+          gh release create "$GITHUB_REF_NAME" "$setup" --verify-tag --title "AkustikMess $VERSION" \
+            --notes-file notes.md $pre
+
+  macos:
+    needs: windows
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Abhängigkeiten
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Installer bauen
+        run: python tools/release.py build --skip-tests
+
+      - name: An das GitHub-Release hängen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" release_build/*.pkg

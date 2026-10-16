@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AkustikMess herunterladen</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--text:#1d2129;--dim:#5f6670;--line:#dfe3e8;--accent:#1f6fd1;--beta:#b26a00}
+@media (prefers-color-scheme:dark){:root{--bg:#16181c;--card:#202329;--text:#e7e9ec;--dim:#9aa1aa;--line:#33373e;--accent:#4c97ff;--beta:#ffb547}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 -apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:760px;margin:0 auto;padding:32px 16px 64px}
+h1{margin:0 0 4px;font-size:30px}
+.sub{color:var(--dim);margin:0 0 24px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin-bottom:16px}
+.primary{display:block;width:100%;text-align:center;background:var(--accent);color:#fff;text-decoration:none;
+font-weight:700;font-size:18px;padding:16px;border-radius:12px}
+.primary.disabled{background:var(--line);color:var(--dim);pointer-events:none}
+.meta{color:var(--dim);font-size:14px;margin-top:10px;word-break:break-all}
+.others a{display:inline-block;margin:6px 12px 0 0;color:var(--accent)}
+.toggle{display:flex;gap:6px;margin-bottom:16px}
+.toggle button{flex:1;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--card);
+color:var(--text);font-size:15px;cursor:pointer}
+.toggle button.sel{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);font-weight:700}
+.badge{display:inline-block;font-size:12px;font-weight:700;padding:2px 8px;border-radius:99px;
+background:var(--beta);color:#000;margin-left:6px;vertical-align:middle}
+.notes h3{margin:18px 0 4px;font-size:17px}.notes .date{color:var(--dim);font-size:13px}
+.notes ul{margin:6px 0 0 20px;padding:0}
+.hint{font-size:14px;color:var(--dim)}
+code{background:var(--bg);padding:1px 5px;border-radius:5px}
+footer{margin-top:24px;text-align:center;line-height:1.8}footer a{color:var(--accent)}
+</style>
+</head>
+<body>
+<main>
+  <h1>AkustikMess</h1>
+  <p class="sub">Messsoftware für Beschallung und Raumakustik</p>
+
+  <div class="toggle" role="tablist">
+    <button id="tStable" class="sel">Stabil</button>
+    <button id="tBeta">Beta <span class="badge">Vorabversion</span></button>
+  </div>
+
+  <div class="card">
+    <a id="dl" class="primary disabled" href="#">Lade …</a>
+    <div class="meta" id="meta"></div>
+    <div class="others" id="others"></div>
+  </div>
+
+  <div class="card hint" id="hint"></div>
+
+  <div class="card notes"><h2 style="margin-top:0">Neuerungen</h2><div id="notes">–</div></div>
+
+  <footer class="hint" id="foot" data-repo="__GITHUB_REPO__">
+    © 2026 Alex Kulow · Open Source unter GPL-3.0.
+    <span id="links"></span><br>
+    Free code signing provided by <a href="https://about.signpath.io/">SignPath.io</a>,
+    certificate by <a href="https://signpath.org/">SignPath Foundation</a>.
+  </footer>
+</main>
+<script>
+"use strict";
+const LABEL={windows:"Windows",macos:"macOS",linux:"Linux"};
+const HINT={
+ windows:"Nach dem Download die Datei starten. Es werden keine Administratorrechte benötigt; Updates installiert "+
+   "das Programm danach selbst (nach deiner Zustimmung beim ersten Start). Bei einer ganz neuen Version kann "+
+   "SmartScreen „Der Computer wurde durch Windows geschützt“ melden: <b>Weitere Informationen → Trotzdem ausführen</b>.",
+ macos:"Nach dem Download die <code>.pkg</code>-Datei öffnen. Falls macOS den Start blockiert: "+
+   "<b>Rechtsklick → Öffnen</b> bzw. Systemeinstellungen → Datenschutz &amp; Sicherheit → „Dennoch öffnen“. "+
+   "Beim ersten Start den Mikrofonzugriff erlauben.",
+ linux:"Für Linux gibt es noch kein Installationspaket."};
+let data=null,channel="stable";
+function detectOS(){
+  const p=(navigator.userAgentData&&navigator.userAgentData.platform)||navigator.platform||"";
+  const ua=navigator.userAgent;
+  if(/win/i.test(p)||/Windows/.test(ua))return "windows";
+  if(/mac/i.test(p)||/Mac OS X/.test(ua))return /iPhone|iPad/.test(ua)?"ios":"macos";
+  if(/Android/.test(ua))return "android";
+  if(/linux/i.test(p))return "linux";
+  return "windows";
+}
+const OS=detectOS();
+function vkey(v){const m=v.match(/^(\d+)\.(\d+)\.(\d+)(?:-(alpha|beta|rc)\.(\d+))?$/);if(!m)return [0];
+  return [+m[1],+m[2],+m[3],{alpha:0,beta:1,rc:2}[m[4]]??3,+(m[5]||0)]}
+function cmp(a,b){a=vkey(a);b=vkey(b);for(let i=0;i<5;i++){if((a[i]||0)!==(b[i]||0))return (a[i]||0)-(b[i]||0)}return 0}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function md(t){ // sehr kleines Markdown: Überschriften, Listen, Fett
+  const out=[];let list=false;
+  for(const raw of (t||"").split("\n")){const l=raw.trim();
+    if(/^[-*] /.test(l)){if(!list){out.push("<ul>");list=true}out.push("<li>"+inl(l.slice(2))+"</li>");continue}
+    if(list){out.push("</ul>");list=false}
+    if(/^#{1,4} /.test(l))out.push("<p><b>"+inl(l.replace(/^#+ /,""))+"</b></p>");else if(l)out.push("<p>"+inl(l)+"</p>")}
+  if(list)out.push("</ul>");return out.join("")}
+function inl(s){return esc(s).replace(/\*\*(.+?)\*\*/g,"<b>$1</b>").replace(/`(.+?)`/g,"<code>$1</code>")}
+function fmtSize(b){return b?(b/1048576).toFixed(0)+" MB":""}
+function newest(chans,platform){
+  let best=null;
+  for(const r of data.releases){if(!chans.includes(r.channel))continue;
+    const a=r.assets&&r.assets[platform];if(!a||!a.url)continue;
+    if(!best||cmp(r.version,best.version)>0)best=r}
+  return best}
+function render(){
+  const chans=channel==="beta"?["stable","beta"]:["stable"];
+  const os=LABEL[OS]?OS:"windows";
+  const rel=newest(chans,os),dl=document.getElementById("dl");
+  if(rel){const a=rel.assets[os];dl.href=a.url;dl.className="primary";
+    dl.innerHTML="Für "+LABEL[os]+" herunterladen &nbsp;·&nbsp; Version "+esc(rel.version)+(rel.channel==="beta"?' <span class="badge">Beta</span>':"");
+    document.getElementById("meta").innerHTML=esc(a.file)+" · "+fmtSize(a.size)+" · "+esc(rel.date)+
+      "<br>SHA-256: <code>"+esc(a.sha256)+"</code>"}
+  else{dl.className="primary disabled";dl.textContent="Für "+LABEL[os]+" noch nicht verfügbar";
+    document.getElementById("meta").textContent=""}
+  if(OS==="ios"||OS==="android")document.getElementById("meta").innerHTML+=
+    "<br><b>Hinweis:</b> AkustikMess läuft auf Windows und macOS. Auf dem Handy dient es als Fernbedienung (QR-Code im Programm).";
+  const others=[];
+  for(const p of ["windows","macos","linux"]){if(p===os)continue;const r=newest(chans,p);
+    if(r)others.push('<a href="'+esc(r.assets[p].url)+'">'+LABEL[p]+" (Version "+esc(r.version)+")</a>")}
+  document.getElementById("others").innerHTML=others.length?"Andere Systeme: "+others.join(""):"";
+  document.getElementById("hint").innerHTML=HINT[os];
+  const notes=data.releases.filter(r=>chans.includes(r.channel)).sort((a,b)=>cmp(b.version,a.version)).slice(0,12);
+  document.getElementById("notes").innerHTML=notes.map(r=>"<h3>"+esc(r.version)+(r.channel==="beta"?' <span class="badge">Beta</span>':"")+
+    ' <span class="date">'+esc(r.date)+"</span></h3>"+md(r.notes)).join("")||"–";
+  document.getElementById("tStable").className=channel==="stable"?"sel":"";
+  document.getElementById("tBeta").className=channel==="beta"?"sel":"";
+}
+(function(){const repo=document.getElementById("foot").dataset.repo;
+  if(!/^[\w.-]+\/[\w.-]+$/.test(repo))return;  // Platzhalter nicht ersetzt → keine Links
+  const gh="https://github.com/"+repo,doc=gh+"/blob/main/";
+  document.getElementById("links").innerHTML=[["Quellcode",gh],["Lizenz",doc+"LICENSE"],
+    ["Code-Signatur &amp; Datenschutz",doc+"docs/code-signing-policy.md"],["Fremdkomponenten",doc+"docs/THIRD-PARTY-NOTICES.md"]]
+    .map(([t,u])=>'<a href="'+esc(u)+'">'+t+"</a>").join(" · ")})();
+document.getElementById("tStable").onclick=()=>{channel="stable";render()};
+document.getElementById("tBeta").onclick=()=>{channel="beta";render()};
+fetch("releases.json",{cache:"no-store"}).then(r=>r.json()).then(o=>{data=JSON.parse(o.signed);
+  // noch keine stabile Version für dieses System → direkt die Beta anbieten
+  const os=LABEL[OS]?OS:"windows";
+  if(!newest(["stable"],os)&&newest(["stable","beta"],os))channel="beta";
+  render()})
+ .catch(()=>{document.getElementById("dl").textContent="Release-Verzeichnis nicht erreichbar"});
+</script>
+</body>
+</html>

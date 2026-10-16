@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+build/
+dist/
+screenshots/
+release_build/
+release_demo/
+release_web/
+*.pem
+# lokale Release-Einstellungen (Server, Pfade) – nicht ins öffentliche Repository
+release_config.json
+upload_state.json
+signed-app/
+signed-setup/
+notes.md

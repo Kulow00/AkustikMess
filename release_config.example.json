@@ -1,0 +1,8 @@
+{
+  "mode": "selfhosted",
+  "publish_dir": "C:\Pfad\zum\Projekt\release_web",
+  "base_url": "https://downloads.example.de/",
+  "github": "NAME/akustikmess",
+  "dropbox_links": {},
+  "sftp": {"host": "server.example.de", "port": 22, "user": "akmess-deploy", "remote_dir": "/www"}
+}
