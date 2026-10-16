@@ -25,11 +25,19 @@ import json
 import os
 import re
 import secrets
+import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+
+if __name__ == "__main__":
+    # Mit dem System-Python gestartet? Dann mit dem Projekt-Python (.venv) neu starten,
+    # dort ist cryptography installiert.
+    _venv = ROOT / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    if _venv.exists() and Path(sys.prefix).resolve() != (ROOT / ".venv").resolve():
+        sys.exit(subprocess.call([str(_venv), str(Path(__file__).resolve()), *sys.argv[1:]]))
 
 from akustik import licensing  # noqa: E402
 
