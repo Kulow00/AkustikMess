@@ -20,13 +20,14 @@ Programm keine Verbindung ins Internet auf.
 Die Simulation enthält einen virtuellen Raum mit etwa 1 s Nachhall und eine Loopback-Referenz. Alle Funktionen
 lassen sich damit ausprobieren.
 
-## Die drei Modi
+## Die vier Modi
 
 | Modus | Wofür | Taste |
 |---|---|---|
 | [Echtzeit](echtzeit.html) | Spektrum und Übertragungsfunktion: entzerren, ausrichten, vergleichen | 1 |
 | [Impulsantwort](impulsantwort.html) | Nachhallzeit, Deutlichkeit, STI | 2 |
 | [SPL](spl.html) | Schallpegel überwachen und protokollieren | 3 |
+| [Raum](raum.html) | Lautsprecher planen, Pegelkarte, Sub-Setups, Messpunkte | 4 |
 
 ## Tastenkürzel
 
@@ -38,7 +39,7 @@ lassen sich damit ausprobieren.
 | D · R · P | Laufzeit finden · Mittelung zurücksetzen · Spitzenwert halten |
 | Eingabe | Impulsantwort messen |
 | N | SPL-Notiz eingeben |
-| 1 / 2 / 3 | Modus wechseln |
+| 1 / 2 / 3 / 4 | Modus wechseln |
 | Strg+N/O/S | Sitzung neu/öffnen/speichern |
 | F1 | Übersicht aller Kürzel |
 

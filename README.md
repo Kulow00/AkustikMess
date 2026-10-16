@@ -17,6 +17,7 @@ und bietet den passenden Installer an.
 | **Echtzeit** | Spektrum (Schmalband oder 1/1 … 1/48 Oktave, A/C/Z-Bewertung, Spitzenwert-Halten) · Zweikanal-Übertragungsfunktion (Betrag, Phase, Kohärenz) mit automatischer Laufzeitsuche, Glättung, Kohärenz-Ausblendung · gespeicherte Kurven mit CSV-Export |
 | **Impulsantwort** | Sinus-Sweep-Messung mit optionaler Loopback-Referenz und Mittelung · Ansichten: linear, logarithmisch, ETC, Schroeder-Abklingkurve, Spektrogramm, Frequenzgang · EDT, T20, T30, C50, C80, D50, Ts je Oktavband · STI und STIPA · WAV laden/speichern |
 | **SPL** | LAF/LAS/LAI, Leq (1 s, 1 min, 15 min, gesamt), Spitzenpegel, Max/Min · Kalibrierung mit Schallkalibrator · Ampel und Alarm · Pegelverlauf · CSV-Protokoll · Ereignisnotizen · HTML-Bericht |
+| **Raum** | Raum und Lautsprecher anlegen (Position, Ausrichtung, Pegel, Delay, Polarität, Abstrahlwinkel, Weiche) · Pegelkarte der Hörfläche je Band oder A-bewertet mit phasenrichtiger Summe · Sub-Setups: L/R, Mitte, Broadside, Arc-Delay, Endfire, Cardioid · Bühnenpegel · Messpunkte: Messung vs. Vorhersage |
 
 **In allen Modi:**
 - **Fadenkreuz:** Fährt man mit der Maus über ein Frequenzdiagramm, zeigt es die genaue Frequenz (z. B. 2553 Hz), die Note mit Cent-Abweichung (z. B. D♯7 +44 ct) und den Messwert der Kurve an dieser Stelle.
@@ -70,7 +71,7 @@ Ausgang 1 ──► Lautsprecher/Mischpult ──► Raum ──► Messmikrofon
 | D · R · P | Laufzeit finden · Mittelung zurücksetzen · Spitzenwert halten |
 | Eingabe | Impulsantwort messen |
 | N | SPL-Notiz eingeben |
-| 1 / 2 / 3 | Modus wechseln |
+| 1 / 2 / 3 / 4 | Modus wechseln |
 | Strg+N/O/S | Sitzung neu/öffnen/speichern |
 
 Einzeltasten wirken nicht, solange in ein Eingabefeld getippt wird.

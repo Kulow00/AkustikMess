@@ -11,6 +11,10 @@ Veröffentlichen den Abschnitt der neuen Version und übernimmt ihn als Patch No
 
 ## [Unreleased]
 
+### Neu
+- Neuer Modus **Raum** (Taste 4): Lautsprecher im Raum planen, Pegelkarte der Hörfläche je Frequenzband oder A-bewertet, Sub-Setups (L/R, Mitte, Broadside, Arc, Endfire, Cardioid) mit automatischen Delays, Bühnenpegel, Messpunkte mit Vergleich Messung ↔ Vorhersage
+- Wiki-Seite „Raum“
+
 ## [0.5.0-beta.5] - 2026-10-16
 
 ### Neu

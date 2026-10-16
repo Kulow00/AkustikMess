@@ -13,6 +13,7 @@ from .audio_dialog import AudioDialog
 from .common import set_channel_count
 from .ir_view import ImpulseView
 from .realtime_view import RealtimeView
+from .room_view import RoomView
 from .remote_panel import RemoteController, RemoteDialog
 from .session import EXTENSION, FILE_FILTER, load_session, save_session
 from .spl_view import SPLView
@@ -34,7 +35,7 @@ SHORTCUTS = [
     ("P", "Echtzeit: Spitzenwert halten ein / aus"),
     ("Eingabe", "Impulsantwort: Messung starten"),
     ("N", "SPL: Notiz eingeben"),
-    ("1 / 2 / 3", "Echtzeit / Impulsantwort / SPL"),
+    ("1 / 2 / 3 / 4", "Echtzeit / Impulsantwort / SPL / Raum"),
     ("Strg+N / O / S", "Neue Sitzung / Öffnen / Speichern"),
     ("Strg+Umschalt+S", "Sitzung speichern unter"),
     ("F1", "Diese Übersicht"),
@@ -122,6 +123,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.tabs.addTab(self.realtime, "Echtzeit")
         self.tabs.addTab(self.impulse, "Impulsantwort")
         self.tabs.addTab(self.spl, "SPL")
+        self.room = RoomView(self.state, self.realtime)
+        self.tabs.addTab(self.room, "Raum")
         self.setCentralWidget(self.tabs)
         self.remote = RemoteController(self)
         self._build_menu()
@@ -327,6 +330,7 @@ class MainWindow(QtWidgets.QMainWindow):
             (K.Key_1, False): lambda: self.tabs.setCurrentWidget(self.realtime),
             (K.Key_2, False): lambda: self.tabs.setCurrentWidget(self.impulse),
             (K.Key_3, False): lambda: self.tabs.setCurrentWidget(self.spl),
+            (K.Key_4, False): lambda: self.tabs.setCurrentWidget(self.room),
         }
         if tab is rt:
             table.update({
@@ -479,7 +483,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 "generator": {"name": self.cb_gen.currentText(), "level": self.sp_gen_level.value(),
                               "freq": self.sp_gen_freq.value()}}
         arrays: dict = {}
-        for key, view in (("realtime", self.realtime), ("impulse", self.impulse), ("spl", self.spl)):
+        for key, view in (("realtime", self.realtime), ("impulse", self.impulse), ("spl", self.spl),
+                          ("room", self.room)):
             m, a = view.get_state()
             meta[key] = m
             arrays.update(a)
@@ -495,6 +500,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.realtime.set_state(meta.get("realtime", {}), arrays)
         self.impulse.set_state(meta.get("impulse", {}), arrays)
         self.spl.set_state(meta.get("spl", {}), arrays)
+        self.room.set_state(meta.get("room", {}), arrays)
         self.tabs.setCurrentIndex(int(meta.get("tab", 0)))
 
     def _update_title(self) -> None:
@@ -510,6 +516,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.impulse.set_state({}, {})
         self.spl.reset()
         self.spl.set_state({}, {})
+        self.room.set_state({}, {})
         self.session_path = None
         self._update_title()
 
