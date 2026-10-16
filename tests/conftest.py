@@ -2,6 +2,7 @@
 Programmeinstellungen oder die automatische Sicherung des Nutzers berühren."""
 
 import os
+import sys
 import time
 
 import pytest
@@ -40,3 +41,13 @@ def window(tmp_path_factory):
     app, win = make_window(tmp_path_factory.mktemp("gui"))
     yield app, win
     win.close()
+
+
+def pytest_runtest_logreport(report):
+    """Auf GitHub fehlgeschlagene Tests als Annotation melden (öffentlich sichtbar, auch ohne Anmeldung)."""
+    if not (report.failed and os.environ.get("GITHUB_ACTIONS")):
+        return
+    text = str(report.longrepr)[-3000:]
+    esc = text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+    sys.__stdout__.write(f"\n::error title={report.nodeid}::{esc}\n")
+    sys.__stdout__.flush()
