@@ -1,12 +1,14 @@
 # AkustikMess
 
-**Freie Messsoftware für Beschallungstechnik und Raumakustik – für Windows und macOS.**
+**Messsoftware für Beschallungstechnik und Raumakustik – für Windows und macOS.**
+
+> Internes Repository (Closed Source). Öffentliche Fehlermeldungen: [Kulow00/AkustikMess-Feedback](https://github.com/Kulow00/AkustikMess-Feedback) · Veröffentlichen: [docs/veroeffentlichen.md](docs/veroeffentlichen.md)
 
 AkustikMess hilft beim Einmessen von Lautsprechersystemen und beim Beurteilen von Räumen. Gemessen wird mit
 einem Messmikrofon und einem handelsüblichen Audio-Interface.
 
 **[⬇ Download: akmess.alex-kulow.de](https://akmess.alex-kulow.de)** – die Seite erkennt dein Betriebssystem
-und bietet den passenden Installer an.
+und bietet das passende ZIP-Bundle an.
 
 **[📖 Wiki](https://akmess.alex-kulow.de/wiki/index.html)** – Anleitungen zu Messaufbau, allen Modi und häufigen Problemen (Quelle: [docs/wiki](docs/wiki)).
 
@@ -40,9 +42,11 @@ Ein **Simulationsmodus** (virtueller Raum mit Lautsprecher, ca. 1 s Nachhall und
 
 ## Installation
 
-**Windows (10/11):** Installer von der [Download-Seite](https://akmess.alex-kulow.de) laden und starten. Es werden keine Administratorrechte benötigt.
+Verteilt wird je System ein **ZIP-Bundle** (Programmordner + Startskript + LIESMICH), keine Installation nötig:
 
-**macOS:** Die `.pkg`-Datei laden und öffnen. Da AkustikMess nicht über das Apple-Entwicklerprogramm beglaubigt ist, blockiert macOS den ersten Start: **Systemeinstellungen → Datenschutz & Sicherheit → „Dennoch öffnen“**. Beim ersten Start den Mikrofonzugriff erlauben.
+**Windows (10/11):** ZIP entpacken, Ordner an einen festen Platz legen, **„AkustikMess starten.bat“** doppelklicken. Das Skript entfernt die Download-Markierung nur für diesen Ordner (sonst blockiert Smart App Control das unsignierte Programm) und startet AkustikMess.
+
+**macOS:** ZIP öffnen, Ordner z. B. nach *Programme* legen, beim ersten Mal **Rechtsklick auf „AkustikMess starten.command“ → Öffnen**. Das Skript entfernt die Quarantäne-Markierung und startet die App. Beim ersten Start den Mikrofonzugriff erlauben.
 
 **Updates:** Beim ersten Start fragt AkustikMess, ob es automatisch nach neuen Versionen suchen darf. Gefundene Updates erscheinen nur als Hinweis in der Statusleiste und unterbrechen nie eine Messung; installiert wird erst nach Bestätigung. Unter *Hilfe → Nach Updates suchen…* lässt sich zwischen dem Kanal **Stabil** und **Beta** (neue Funktionen früher, weniger erprobt) wählen. Updates sind digital signiert und werden vor der Installation geprüft.
 
@@ -100,11 +104,13 @@ Die Fernbedienung ist standardmäßig aus und nur mit dem geheimen Schlüssel au
 
 ## Datenschutz
 
-AkustikMess sendet keine Daten über dich oder deine Messungen. Netzwerkzugriffe gibt es nur, wenn du sie erlaubst: die Update-Suche (lädt nur die öffentliche Versionsliste) und die Fernbedienung im lokalen Netzwerk. Messungen und Sitzungen bleiben auf deinem Rechner. Details: [Code-Signatur und Datenschutz](docs/code-signing-policy.md).
+AkustikMess sendet keine Daten über dich oder deine Messungen. Netzwerkzugriffe gibt es nur, wenn du sie erlaubst: die Update-Suche (lädt nur die öffentliche Versionsliste) und die Fernbedienung im lokalen Netzwerk. Messungen und Sitzungen bleiben auf deinem Rechner. Details: [Datenschutzerklärung](https://akmess.alex-kulow.de/datenschutz.html).
 
-## Fehler melden und mitmachen
+## Fehler melden
 
-Fehler und Vorschläge bitte als [Issue](../../issues) melden – am besten mit Betriebssystem, Audio-Interface und den Schritten, die zum Fehler führen. Für Code-Beiträge gelten die Bedingungen in [CONTRIBUTING.md](CONTRIBUTING.md).
+Nutzer melden Fehler und Ideen im öffentlichen Repository [Kulow00/AkustikMess-Feedback](https://github.com/Kulow00/AkustikMess-Feedback) (Vorlage dafür: [feedback-repo/](feedback-repo)). Im Programm: *Hilfe → Fehler melden / Idee vorschlagen…*
+
+## Entwicklung
 
 ### Aus dem Quellcode starten
 
@@ -130,10 +136,8 @@ Unter Windows startet auch `start_windows.bat`, unter macOS `start_macos.command
 
 ## Lizenz
 
-Copyright © 2026 Alex Kulow.
+Copyright © 2026 Alex Kulow. Alle Rechte vorbehalten – Nutzung gemäß den [Nutzungsbedingungen](LICENSE).
 
-AkustikMess ist freie Software: Du kannst sie unter den Bedingungen der [GNU General Public License](LICENSE), Version 3 oder (nach deiner Wahl) jeder späteren Version, weitergeben und/oder verändern. Sie wird OHNE JEDE GEWÄHRLEISTUNG bereitgestellt. Wer eine veränderte Fassung weitergibt, muss deren Quellcode ebenfalls unter der GPL veröffentlichen.
+Versionen bis einschließlich 0.5.0-beta.5 wurden unter der GNU GPL 3.0 verbreitet und bleiben für deren Empfänger unter dieser Lizenz.
 
 Mitgelieferte Fremdkomponenten (u. a. Qt/PySide6 unter LGPL-3.0) behalten ihre eigenen Lizenzen, siehe [docs/THIRD-PARTY-NOTICES.md](docs/THIRD-PARTY-NOTICES.md).
-
-Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).

@@ -57,7 +57,7 @@ def test_publish_takes_signed_installer_from_github(gh):
     assert a["url"] == f"https://akmess.example.de/files/{SETUP}"
     assert (gh["pub"] / "files" / SETUP).read_bytes() == gh["payload"]
     page = (gh["pub"] / "index.html").read_text(encoding="utf-8")
-    assert "https://github.com/alex/akustikmess/issues" in page and "{{" not in page
+    assert "https://github.com/Kulow00/AkustikMess-Feedback/issues" in page and "{{" not in page
     assert (gh["pub"] / "wiki" / "index.html").exists() and (gh["pub"] / "assets" / "download.js").exists()
 
 

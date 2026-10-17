@@ -246,9 +246,93 @@ def download(asset: dict, progress=None, cancel=None, timeout: float = 60) -> st
     return path
 
 
-def launch_installer(path: str, platform: str | None = None) -> None:
-    """Startet die geprüfte Installationsdatei. Das Programm beendet sich danach selbst."""
+def app_location(platform: str | None = None):
+    """Programmordner (Windows) bzw. AkustikMess.app (macOS) der laufenden, gebündelten Fassung."""
+    from pathlib import Path  # noqa: PLC0415
+    if not getattr(sys, "frozen", False):
+        return None
+    exe = Path(sys.executable).resolve()
+    if (platform or current_platform()) == "macos":
+        return next((p for p in exe.parents if p.suffix == ".app"), None)
+    return exe.parent
+
+
+def _bundle_root(extracted, platform: str):
+    """Programm im entpackten Bundle: Ordner mit AkustikMess.exe bzw. die .app."""
+    from pathlib import Path  # noqa: PLC0415
+    extracted = Path(extracted)
+    if platform == "macos":
+        hits = sorted(extracted.glob("*/AkustikMess.app")) + sorted(extracted.glob("AkustikMess.app"))
+    else:
+        hits = [p.parent for p in sorted(extracted.glob("*/AkustikMess.exe")) + sorted(extracted.glob("AkustikMess.exe"))]
+    if not hits:
+        raise UpdateError("Das Update-Paket enthält kein AkustikMess-Programm")
+    return hits[0]
+
+
+def bundle_update_script(new_root, target, pid: int, platform: str, workdir, restart: bool = True) -> str:
+    """Hilfsskript, das nach dem Beenden (Prozess ``pid``) die Programmdateien austauscht und neu startet."""
+    if platform == "windows":
+        lines = ["@echo off", "chcp 65001 >nul",
+                 ":warten",
+                 f'tasklist /FI "PID eq {pid}" 2>nul | find "{pid}" >nul && (timeout /t 1 /nobreak >nul & goto warten)',
+                 # Programmteile spiegeln (alte Reste entfernen), übrige Dateien im Ordner nur ersetzen
+                 f'robocopy "{new_root}\\_internal" "{target}\\_internal" /MIR /R:5 /W:1 /NFL /NDL /NJH /NJS /NP >nul',
+                 f'robocopy "{new_root}" "{target}" /XD _internal /R:5 /W:1 /NFL /NDL /NJH /NJS /NP >nul']
+        if restart:
+            lines.append(f'start "" "{target}\\AkustikMess.exe"')
+        lines.append(f'rmdir /s /q "{workdir}"')
+        return "\r\n".join(lines) + "\r\n"
+    lines = ["#!/bin/sh",
+             f"while kill -0 {pid} 2>/dev/null; do sleep 0.5; done",
+             f'rm -rf "{target}.alt"',
+             f'if mv "{target}" "{target}.alt" && ditto "{new_root}" "{target}"; then rm -rf "{target}.alt"; '
+             f'else rm -rf "{target}"; mv "{target}.alt" "{target}"; fi',
+             f'xattr -dr com.apple.quarantine "{target}" 2>/dev/null']
+    if restart:
+        lines.append(f'open "{target}"')
+    lines.append(f'rm -rf "{workdir}"')
+    return "\n".join(lines) + "\n"
+
+
+def prepare_bundle_update(zip_path: str, target=None, platform: str | None = None, pid: int | None = None,
+                          restart: bool = True) -> str:
+    """ZIP entpacken und Austausch-Skript schreiben. Liefert den Pfad des Skripts."""
+    import tempfile  # noqa: PLC0415
+    import zipfile  # noqa: PLC0415
+    from pathlib import Path  # noqa: PLC0415
     platform = platform or current_platform()
+    target = Path(target) if target else app_location(platform)
+    if target is None:
+        raise UpdateError("Nur die gebündelte Fassung kann sich selbst aktualisieren")
+    work = Path(tempfile.mkdtemp(prefix="akustikmess-update-"))
+    if platform == "macos":
+        subprocess.run(["ditto", "-x", "-k", str(zip_path), str(work)], check=True)  # noqa: S603, S607
+    else:
+        with zipfile.ZipFile(zip_path) as z:
+            for name in z.namelist():                  # keine Pfade außerhalb des Arbeitsordners
+                dest = (work / name).resolve()
+                if not str(dest).startswith(str(work.resolve())):
+                    raise UpdateError("Ungültiger Pfad im Update-Paket")
+            z.extractall(work)
+    new_root = _bundle_root(work, platform)
+    script = work / ("update.cmd" if platform == "windows" else "update.sh")
+    text = bundle_update_script(new_root, target, pid or os.getpid(), platform, work, restart)
+    script.write_text(text, encoding="utf-8", newline="")
+    return str(script)
+
+
+def launch_installer(path: str, platform: str | None = None) -> None:
+    """Startet die geprüfte Installationsdatei bzw. tauscht das ZIP-Bundle aus. Das Programm beendet sich danach."""
+    platform = platform or current_platform()
+    if str(path).lower().endswith(".zip"):
+        script = prepare_bundle_update(path, platform=platform)
+        if platform == "windows":
+            flags = 0x00000008 | 0x00000200 | 0x08000000   # DETACHED_PROCESS | NEW_PROCESS_GROUP | NO_WINDOW
+            subprocess.Popen(["cmd", "/c", script], creationflags=flags, close_fds=True)  # noqa: S603, S607
+        else:
+            subprocess.Popen(["/bin/sh", script], start_new_session=True)  # noqa: S603, S607
+        return
     if platform == "windows":
         # still installieren, laufendes Programm schließen, danach neu starten (siehe windows.iss)
         subprocess.Popen([path, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART",  # noqa: S603

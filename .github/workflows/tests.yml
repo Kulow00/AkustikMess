@@ -1,4 +1,4 @@
-# Führt bei jedem Push und Pull Request die Tests aus.
+# Führt bei jedem Push und Pull Request die Tests aus (Windows).
 name: Tests
 
 on:
@@ -11,11 +11,8 @@ permissions:
 
 jobs:
   tests:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+    # nur Windows: bei privaten Repositories zählen macOS-Minuten zehnfach (macOS wird beim Release geprüft)
+    runs-on: windows-latest
     env:
       PYTHONUTF8: "1"
       QT_QPA_PLATFORM: offscreen

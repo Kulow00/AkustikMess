@@ -1,7 +1,6 @@
 # Veröffentlichen (nur für den Projektinhaber)
 
 Interne Anleitung für Releases von AkustikMess. Für Nutzer nicht relevant.
-Einrichtung der Code-Signatur: [signpath-einrichtung.md](signpath-einrichtung.md) ·
 Server: [server-einrichtung.md](server-einrichtung.md) ·
 Lizenzen und Homepage: [lizenzsystem.md](lizenzsystem.md), [lizenzserver-einrichtung.md](lizenzserver-einrichtung.md)
 
@@ -39,7 +38,18 @@ python tools/release.py status                                   # Übersicht
 
 **macOS-Installer:** Baut GitHub Actions bei jedem Release mit (`publish --platform windows --platform macos` übernimmt ihn). Alternativ auf einem Mac: `tools/build_macos.sh`, dann `release.py add-asset --platform macos --file …`.
 
-**Hinweis Code-Signatur:**
-- **Windows:** Programm und Installer werden kostenlos über die SignPath Foundation signiert. Ohne Signatur blockiert Windows **Smart App Control** heruntergeladene Installer komplett; `publish` lehnt unsignierte Windows-Installer deshalb ab. SmartScreen kann bei neuen Versionen anfangs noch „Unbekannte App“ melden.
-- **macOS:** Ohne Apple-Developer-Konto (99 $/Jahr) und Notarisierung blockiert Gatekeeper den ersten Start (Rechtsklick → Öffnen).
-- Die Update-Signatur von AkustikMess (`releases.json`) ist davon unabhängig.
+**Verteilung als ZIP-Bundle:** Je System entsteht `AkustikMess-<Version>-Windows.zip` bzw. `-macOS.zip` mit dem
+Programmordner, einem Startskript (entfernt die Download-Markierung für den eigenen Ordner) und LIESMICH. Installer
+(Inno Setup, pkg) sind noch vorhanden (`build --stage installer`), aber erst mit eigenem Code-Signing-Zertifikat
+sinnvoll – unsignierte Installer blockiert Smart App Control.
+
+**Privates Repository:** `publish` braucht einen GitHub-Zugangsschlüssel mit Leserecht. Einmalig auf GitHub unter
+*Settings → Developer settings → Personal access tokens → Fine-grained tokens* einen Token nur für
+`Kulow00/AkustikMess` mit **Contents: Read-only** anlegen und speichern:
+
+```bash
+python tools/release.py github-token
+```
+
+**GitHub-Minuten:** Private Repositories haben im kostenlosen Plan 2.000 Minuten/Monat; macOS zählt zehnfach.
+Ein Release kostet etwa 20 (Windows) + 10×10 (macOS) ≈ 120 Minuten, ein Push mit Tests etwa 5 Minuten.

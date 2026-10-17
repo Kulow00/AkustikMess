@@ -23,3 +23,5 @@ ENFORCEMENT = "remind"
 SITE_URL = "https://akmess.alex-kulow.de"
 REGISTER_URL = SITE_URL + "/registrieren.html"
 REVOCATIONS_URL = SITE_URL + "/api/revocations"
+# Öffentliches Repository nur für Fehlermeldungen und Ideen (der Quellcode ist privat)
+FEEDBACK_URL = "https://github.com/Kulow00/AkustikMess-Feedback/issues/new/choose"

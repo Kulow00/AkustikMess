@@ -1,0 +1,18 @@
+AkustikMess für Windows
+=======================
+
+Starten
+-------
+1. Diesen Ordner an einen festen Platz legen (z. B. "Dokumente\AkustikMess"), nicht im Download-Ordner lassen.
+2. "AkustikMess starten.bat" doppelklicken.
+   Fragt Windows "Möchten Sie diese Datei ausführen?", auf "Ausführen" klicken.
+3. Tipp: Rechtsklick auf "AkustikMess starten.bat" → "Verknüpfung erstellen" und die Verknüpfung auf den Desktop legen.
+
+Updates installiert AkustikMess selbst (Hilfe → Nach Updates suchen…), dieser Ordner wird dabei aktualisiert.
+
+Falls Windows den Start trotzdem blockiert (Smart App Control)
+------------------------------------------------------------
+Den Ordner löschen, die heruntergeladene ZIP-Datei mit Rechtsklick → Eigenschaften öffnen, unten
+"Zulassen" anhaken → OK, dann die ZIP erneut entpacken und "AkustikMess starten.bat" ausführen.
+
+Hilfe und Fehler melden: https://akmess.alex-kulow.de

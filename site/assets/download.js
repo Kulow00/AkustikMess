@@ -3,13 +3,16 @@
 "use strict";
 const LABEL={windows:"Windows",macos:"macOS",linux:"Linux"};
 const HINT={
- windows:"Nach dem Download die Datei starten. Es werden keine Administratorrechte benötigt; Updates installiert "+
-   "das Programm danach selbst (nach deiner Zustimmung beim ersten Start). Bei einer ganz neuen Version kann "+
-   "SmartScreen „Der Computer wurde durch Windows geschützt“ melden: <b>Weitere Informationen → Trotzdem ausführen</b>.",
- macos:"Nach dem Download die <code>.pkg</code>-Datei öffnen. Falls macOS den Start blockiert: "+
-   "<b>Rechtsklick → Öffnen</b> bzw. Systemeinstellungen → Datenschutz &amp; Sicherheit → „Dennoch öffnen“. "+
-   "Beim ersten Start den Mikrofonzugriff erlauben.",
- linux:"Für Linux gibt es noch kein Installationspaket."};
+ windows:"<b>So geht’s:</b> ZIP-Datei entpacken (Rechtsklick → „Alle extrahieren“), den Ordner <b>AkustikMess</b> an "+
+   "einen festen Platz legen (z. B. Dokumente) und <b>„AkustikMess starten.bat“</b> doppelklicken – fragt Windows nach, "+
+   "„Ausführen“ wählen. Keine Installation und keine Administratorrechte nötig; Updates holt das Programm selbst.<br>"+
+   "<b>Blockiert Windows den Start</b> (Smart App Control, „Computer wurde geschützt“)? Vor dem Entpacken: Rechtsklick auf die "+
+   "ZIP-Datei → Eigenschaften → unten <b>„Zulassen“</b> anhaken → OK, dann entpacken.",
+ macos:"<b>So geht’s:</b> ZIP-Datei öffnen (wird automatisch entpackt), den Ordner <b>AkustikMess</b> z. B. in "+
+   "„Programme“ legen. Beim ersten Mal <b>Rechtsklick auf „AkustikMess starten.command“ → Öffnen → Öffnen</b> "+
+   "(ein Doppelklick wird beim ersten Mal von macOS blockiert, weil AkustikMess nicht von Apple beglaubigt ist). "+
+   "Danach den Mikrofonzugriff erlauben. Updates holt das Programm selbst.",
+ linux:"Für Linux gibt es noch kein Paket."};
 let data=null,channel="stable";
 function detectOS(){
   const p=(navigator.userAgentData&&navigator.userAgentData.platform)||navigator.platform||"";
@@ -45,7 +48,8 @@ function render(){
   const os=LABEL[OS]?OS:"windows";
   const rel=newest(chans,os),dl=document.getElementById("dl");
   if(rel){const a=rel.assets[os];dl.href=a.url;dl.className="primary";
-    dl.innerHTML="Für "+LABEL[os]+" herunterladen &nbsp;·&nbsp; Version "+esc(rel.version)+(rel.channel==="beta"?' <span class="badge">Beta</span>':"");
+    const kind=/\.zip$/i.test(a.file||"")?" (ZIP)":"";
+    dl.innerHTML="Für "+LABEL[os]+" herunterladen"+kind+" &nbsp;·&nbsp; Version "+esc(rel.version)+(rel.channel==="beta"?' <span class="badge">Beta</span>':"");
     document.getElementById("meta").innerHTML=esc(a.file)+" · "+fmtSize(a.size)+" · "+esc(rel.date)+
       "<br>SHA-256: <code>"+esc(a.sha256)+"</code>"}
   else{dl.className="primary disabled";dl.textContent="Für "+LABEL[os]+" noch nicht verfügbar";

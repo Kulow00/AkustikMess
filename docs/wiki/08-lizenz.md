@@ -1,7 +1,7 @@
 # Lizenz und Registrierung
 
-AkustikMess ist **kostenlos** und Open Source (GPL-3.0). Mit einer kostenlosen Registrierung bekommst du einen
-persönlichen Lizenzschlüssel.
+AkustikMess ist **kostenlos** nutzbar (siehe [Nutzungsbedingungen](../nutzungsbedingungen.html)). Mit einer
+kostenlosen Registrierung bekommst du einen persönlichen Lizenzschlüssel.
 
 ## Schlüssel bekommen
 

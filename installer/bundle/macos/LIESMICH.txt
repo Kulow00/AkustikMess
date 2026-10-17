@@ -1,0 +1,17 @@
+AkustikMess für macOS
+=====================
+
+Starten
+-------
+1. Den Ordner "AkustikMess" z. B. in "Programme" oder "Dokumente" legen.
+2. Beim ersten Mal: Rechtsklick (bzw. ctrl-Klick) auf "AkustikMess starten.command" → "Öffnen" → "Öffnen".
+   (Ein normaler Doppelklick wird beim ersten Mal von macOS blockiert, weil AkustikMess nicht von Apple
+   beglaubigt ist.)
+3. Danach startet AkustikMess.app auch per Doppelklick. Beim ersten Start den Mikrofonzugriff erlauben.
+
+Falls macOS meldet, das Programm sei beschädigt oder könne nicht geöffnet werden:
+Systemeinstellungen → Datenschutz & Sicherheit → ganz unten "Dennoch öffnen".
+
+Updates installiert AkustikMess selbst (Hilfe → Nach Updates suchen…).
+
+Hilfe und Fehler melden: https://akmess.alex-kulow.de

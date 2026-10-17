@@ -43,4 +43,4 @@ body:
     id: anhang
     attributes:
       label: Screenshots, Fehlermeldungen, Sitzungsdatei
-      description: Bilder oder eine .akmess-Datei hier hineinziehen (optional).
+      description: Bilder oder eine .akmess-Datei hier hineinziehen (optional). Bitte keine Lizenzschlüssel einfügen – Meldungen sind öffentlich.

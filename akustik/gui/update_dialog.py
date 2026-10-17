@@ -16,6 +16,7 @@ import time
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from .. import APP_NAME, COPYRIGHT, __version__, update
+from ..license_config import SITE_URL
 from ..update_config import MANIFEST_URL
 
 
@@ -306,7 +307,7 @@ class AboutDialog(QtWidgets.QMessageBox):
             "Messsoftware für Beschallung und Raumakustik.<br>"
             "Bibliotheken: Qt (PySide6), NumPy, SciPy, pyqtgraph, PortAudio (sounddevice), qrcode, cryptography.<br><br>"
             f"{COPYRIGHT}<br>"
-            "Freie Software unter der GNU General Public License, Version 3 oder neuer. "
-            "Es gibt KEINE GEWÄHRLEISTUNG, soweit gesetzlich zulässig. "
-            '<a href="https://www.gnu.org/licenses/gpl-3.0.html">Lizenztext</a>')
+            "Alle Rechte vorbehalten. Kostenlos nutzbar gemäß den "
+            f'<a href="{SITE_URL}/nutzungsbedingungen.html">Nutzungsbedingungen</a>. '
+            "Enthält Fremdkomponenten unter eigenen Lizenzen (u. a. Qt unter LGPL 3.0).")
         self.setTextInteractionFlags(QtCore.Qt.TextBrowserInteraction)  # Link anklickbar

@@ -97,6 +97,7 @@ def build(out: Path, cfg: dict, today: dt.date | None = None) -> list[str]:
     values = {
         "repo": repo,
         "repo_url": f"https://github.com/{repo}" if repo else "https://github.com",
+        "feedback_url": "https://github.com/" + (cfg.get("feedback_repo") or "Kulow00/AkustikMess-Feedback"),
         "owner_name": esc["owner_name"] or "AkustikMess",
         "owner_address": esc["owner_address"].replace("\n", "<br>") or "–",
         "owner_email": (f'<a href="mailto:{esc["owner_email"]}">{esc["owner_email"]}</a>'
@@ -118,6 +119,12 @@ def build(out: Path, cfg: dict, today: dt.date | None = None) -> list[str]:
     for f in sorted((SITE_DIR / "pages").glob("*.html")):
         meta, body = _meta(f.read_text(encoding="utf-8"))
         (out / f.name).write_text(_render(layout, body, meta, values, "", nav_of.get(f.stem, "")), encoding="utf-8")
+
+    # Nutzungsbedingungen direkt aus der LICENSE-Datei (eine Quelle für Programm, Bundle und Website)
+    lic = (ROOT / "LICENSE").read_text(encoding="utf-8").replace("{{", "&#123;&#123;")
+    body = f'<h1>Nutzungsbedingungen</h1><pre class="license">{html.escape(lic)}</pre>'
+    (out / "nutzungsbedingungen.html").write_text(
+        _render(layout, body, {"title": "Nutzungsbedingungen", "narrow": True}, values, "", ""), encoding="utf-8")
 
     # Wiki
     pages = wiki_pages()

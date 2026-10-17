@@ -11,6 +11,11 @@ Veröffentlichen den Abschnitt der neuen Version und übernimmt ihn als Patch No
 
 ## [Unreleased]
 
+### Geändert
+- Verteilung als ZIP-Paket je System statt Installer: entpacken und „AkustikMess starten“ ausführen – keine Installation und keine Administratorrechte nötig; Updates tauschen den Programmordner automatisch aus
+- AkustikMess ist jetzt Closed Source und kostenlos nutzbar nach den Nutzungsbedingungen (frühere Versionen bleiben GPL)
+- Fehler und Ideen melden über Hilfe → „Fehler melden / Idee vorschlagen…“ (öffentliches Feedback-Verzeichnis)
+
 ### Neu
 - Neuer Modus **Raum** (Taste 4): Lautsprecher im Raum planen, Pegelkarte der Hörfläche je Frequenzband oder A-bewertet, Sub-Setups (L/R, Mitte, Broadside, Arc, Endfire, Cardioid) mit automatischen Delays, Bühnenpegel, Messpunkte mit Vergleich Messung ↔ Vorhersage
 - Wiki-Seite „Raum“

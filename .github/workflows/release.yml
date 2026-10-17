@@ -1,16 +1,10 @@
-# Baut, signiert und veröffentlicht ein Release, sobald ein Tag "v*" gepusht wird
+# Baut und veröffentlicht ein Release, sobald ein Tag "v*" gepusht wird
 # (das macht `python tools/release.py release --channel …`).
 #
-# Ablauf Windows:
-#   Tests → Programm bauen → AkustikMess.exe von SignPath signieren lassen → Installer bauen
-#   → Installer von SignPath signieren lassen → GitHub-Release mit Patch Notes anlegen
-# macOS: .pkg bauen (noch unsigniert) und an dasselbe Release hängen.
-#
-# Signiert wird nur, wenn das Secret SIGNPATH_API_TOKEN gesetzt ist (siehe docs/signpath-einrichtung.md);
-# sonst entsteht ein unsigniertes Release. SignPath fordert für jede Signatur eine Freigabe an.
-#
-# Das Release-Verzeichnis auf akmess.alex-kulow.de wird NICHT hier signiert: der private
-# Update-Schlüssel bleibt auf deinem Rechner (`python tools/release.py publish --wait`).
+# Je System entsteht ein ZIP-Bundle: Programmordner + Startskript + LIESMICH. Vor dem Hochladen prüft der
+# Selbsttest das fertig gebaute Programm. Danach am eigenen Rechner:
+#   python tools/release.py publish --wait --platform windows --platform macos
+# (holt die Bundles, signiert das Release-Verzeichnis mit dem Update-Schlüssel und lädt alles hoch).
 
 name: Release
 
@@ -20,7 +14,6 @@ on:
 
 permissions:
   contents: write   # GitHub-Release anlegen
-  actions: read     # SignPath holt die Artefakte dieses Laufs
 
 env:
   PYTHONUTF8: "1"
@@ -29,9 +22,7 @@ env:
 jobs:
   windows:
     runs-on: windows-latest
-    timeout-minutes: 360
-    env:
-      SIGNING: ${{ secrets.SIGNPATH_API_TOKEN != '' }}
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
 
@@ -58,85 +49,28 @@ jobs:
 
       - name: Selbsttest des gebauten Programms
         shell: bash
-        env:
-          QT_QPA_PLATFORM: offscreen
         run: |
           out="$RUNNER_TEMP/selbsttest.txt"
           AKUSTIKMESS_SELFTEST="$out" dist/AkustikMess/AkustikMess.exe || { cat "$out"; exit 1; }
           cat "$out"
 
-      - name: Programmdatei für SignPath bereitstellen
-        id: app-unsigned
-        if: env.SIGNING == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-unsigned
-          path: dist/AkustikMess/AkustikMess.exe
-          if-no-files-found: error
-
-      - name: Programmdatei signieren (SignPath)
-        if: env.SIGNING == 'true'
-        uses: signpath/github-action-submit-signing-request@v1
-        with:
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'akustikmess' }}
-          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
-          artifact-configuration-slug: app
-          github-artifact-id: ${{ steps.app-unsigned.outputs.artifact-id }}
-          wait-for-completion: true
-          wait-for-completion-timeout-in-seconds: 14400
-          output-artifact-directory: signed-app
-
-      - name: Signierte Programmdatei übernehmen
-        if: env.SIGNING == 'true'
-        shell: bash
-        run: cp -f signed-app/AkustikMess.exe dist/AkustikMess/AkustikMess.exe
-
-      - name: Inno Setup
-        run: choco install innosetup --no-progress -y
-
-      - name: Installer bauen
-        run: python tools/release.py build --stage installer --skip-tests
-
-      - name: Installer für SignPath bereitstellen
-        id: setup-unsigned
-        if: env.SIGNING == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: installer-unsigned
-          path: release_build/AkustikMess-${{ env.VERSION }}-Windows-Setup.exe
-          if-no-files-found: error
-
-      - name: Installer signieren (SignPath)
-        if: env.SIGNING == 'true'
-        uses: signpath/github-action-submit-signing-request@v1
-        with:
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'akustikmess' }}
-          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
-          artifact-configuration-slug: installer
-          github-artifact-id: ${{ steps.setup-unsigned.outputs.artifact-id }}
-          wait-for-completion: true
-          wait-for-completion-timeout-in-seconds: 14400
-          output-artifact-directory: signed-setup
+      - name: ZIP-Bundle bauen
+        run: python tools/release.py build --stage bundle --skip-tests
 
       - name: GitHub-Release anlegen
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          name="AkustikMess-$VERSION-Windows-Setup.exe"
-          if [ "$SIGNING" = "true" ]; then setup="signed-setup/$name"; else setup="release_build/$name"; fi
           python tools/release.py notes --version "$VERSION" > notes.md
           pre=""; case "$VERSION" in *-*) pre="--prerelease";; esac
-          gh release create "$GITHUB_REF_NAME" "$setup" --verify-tag --title "AkustikMess $VERSION" \
-            --notes-file notes.md $pre
+          gh release create "$GITHUB_REF_NAME" "release_build/AkustikMess-$VERSION-Windows.zip" --verify-tag \
+            --title "AkustikMess $VERSION" --notes-file notes.md $pre
 
   macos:
     needs: windows
     runs-on: macos-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
 
@@ -148,18 +82,19 @@ jobs:
       - name: Abhängigkeiten
         run: python -m pip install -r requirements-dev.txt
 
-      - name: Installer bauen
-        run: python tools/release.py build --skip-tests
+      - name: Programm bauen
+        run: python tools/release.py build --stage app --skip-tests
 
       - name: Selbsttest des gebauten Programms
-        env:
-          QT_QPA_PLATFORM: offscreen
         run: |
           out="$RUNNER_TEMP/selbsttest.txt"
           AKUSTIKMESS_SELFTEST="$out" dist/AkustikMess.app/Contents/MacOS/AkustikMess || { cat "$out"; exit 1; }
           cat "$out"
 
+      - name: ZIP-Bundle bauen
+        run: python tools/release.py build --stage bundle --skip-tests
+
       - name: An das GitHub-Release hängen
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$GITHUB_REF_NAME" release_build/*.pkg
+        run: gh release upload "$GITHUB_REF_NAME" release_build/*-macOS.zip

@@ -17,7 +17,7 @@ Pro Veröffentlichung (Patch Notes vorher in CHANGELOG.md unter [Unreleased] ein
 
 Mit GitHub (``configure-github``) erhöht ``release`` nur Version und CHANGELOG, testet,
 committet und pusht das Tag ``v<version>``. GitHub Actions baut dann Windows und macOS,
-SignPath signiert (nach Freigabe in SignPath) und hängt die Installer an das GitHub-Release.
+prüft das gebaute Programm per Selbsttest und hängt die ZIP-Bundles an das GitHub-Release.
 Danach::
 
     python tools/release.py publish --wait             # signierte Installer holen, prüfen, hochladen
@@ -68,7 +68,18 @@ CHANGELOG = ROOT / "CHANGELOG.md"
 CONFIG_FILE = ROOT / "release_config.json"
 BUILD_DIR = ROOT / "release_build"
 KEY_FILE = Path.home() / ".akustikmess" / "release_signing_key.pem"
-EXT = {"windows": "-Windows-Setup.exe", "macos": "-macOS.pkg", "linux": "-Linux.AppImage"}
+# Verteilt werden ZIP-Bundles (Programmordner + Startskript); Installer bleiben für später (mit Code-Signatur)
+EXT = {"windows": "-Windows.zip", "macos": "-macOS.zip", "linux": "-Linux.zip"}
+INSTALLER_EXT = {"windows": "-Windows-Setup.exe", "macos": "-macOS.pkg"}
+BUNDLE_FILES = ROOT / "installer" / "bundle"
+
+
+def file_ext(name: str, platform: str) -> str:
+    """Endung einer Verteildatei (Bundle oder Installer)."""
+    for ext in (EXT.get(platform, ""), INSTALLER_EXT.get(platform, "")):
+        if ext and name.endswith(ext):
+            return ext
+    return EXT[platform]
 
 
 class ReleaseError(Exception):
@@ -223,14 +234,16 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
-def asset_target(cfg: dict, version: str, channel: str, platform: str) -> tuple[str, str | None]:
+def asset_target(cfg: dict, version: str, channel: str, platform: str, ext: str | None = None
+                 ) -> tuple[str, str | None]:
     """(relativer Zielpfad im Veröffentlichungsordner, Download-URL oder None)."""
+    ext = ext or EXT[platform]
     if cfg["mode"] == "dropbox":
         # feste Dateinamen je Kanal: Freigabelinks bleiben beim Überschreiben gleich
-        rel = f"{channel}/{APP}-{channel}{EXT[platform]}"
+        rel = f"{channel}/{APP}-{channel}{ext}"
         link = cfg["dropbox_links"].get(f"{channel}/{platform}")
         return rel, direct_url(link) if link else None
-    rel = f"files/{APP}-{version}{EXT[platform]}"
+    rel = f"files/{APP}-{version}{ext}"
     return rel, cfg["base_url"].rstrip("/") + "/" + rel
 
 
@@ -264,16 +277,17 @@ def publish(cfg: dict, file: Path, *, version: str, channel: str, platform: str,
             private_key, date: str | None = None) -> dict:
     publish_dir = Path(cfg["publish_dir"])
     publish_dir.mkdir(parents=True, exist_ok=True)
-    rel, url = asset_target(cfg, version, channel, platform)
+    ext = file_ext(Path(file).name, platform)
+    rel, url = asset_target(cfg, version, channel, platform, ext)
     target = publish_dir / rel
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(file, target)
     if cfg["mode"] == "dropbox":  # versionierte Sicherungskopie (Archiv)
-        arch = publish_dir / "archiv" / f"{APP}-{version}{EXT[platform]}"
+        arch = publish_dir / "archiv" / f"{APP}-{version}{ext}"
         arch.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(file, arch)
-    asset = {"file": f"{APP}-{version}{EXT[platform]}", "url": url, "sha256": sha256_file(target),
-             "size": target.stat().st_size}
+    asset = {"file": f"{APP}-{version}{ext}", "url": url, "sha256": sha256_file(target),
+             "size": target.stat().st_size, "kind": "bundle" if ext.endswith(".zip") else "installer"}
     manifest = load_manifest(publish_dir, private_key)
     add_to_manifest(manifest, version=version, channel=channel, date=date or dt.date.today().isoformat(),
                     notes=notes, platform=platform, asset=asset, mode=cfg["mode"])
@@ -324,8 +338,49 @@ def run(cmd: list, **kw) -> None:
     subprocess.run([str(c) for c in cmd], check=True, cwd=ROOT, **kw)
 
 
+def make_bundle(version: str, platform: str) -> Path:
+    """ZIP mit dem fertigen Programm, Startskript und LIESMICH (ein Ordner „AkustikMess“)."""
+    import zipfile  # noqa: PLC0415
+    BUILD_DIR.mkdir(exist_ok=True)
+    out = BUILD_DIR / f"{APP}-{version}{EXT[platform]}"
+    extra = sorted((BUNDLE_FILES / platform).iterdir())
+    legal = [ROOT / "LICENSE", ROOT / "docs" / "THIRD-PARTY-NOTICES.md"]
+    if platform == "windows":
+        src = ROOT / "dist" / APP
+        if not (src / f"{APP}.exe").exists():
+            raise ReleaseError(f"Programm fehlt: {src} – zuerst `build --stage app`")
+        out.unlink(missing_ok=True)
+        with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
+            for f in sorted(src.rglob("*")):
+                if f.is_file():
+                    z.write(f, f"{APP}/{f.relative_to(src).as_posix()}")
+            for f in extra:
+                z.write(f, f"{APP}/{f.name}")
+            z.write(legal[0], f"{APP}/LIZENZ.txt")
+            z.write(legal[1], f"{APP}/Fremdkomponenten.md")
+    elif platform == "macos":
+        # ditto erhält Symlinks und Ausführungsrechte im .app-Paket (zipfile kann das nicht)
+        stage_dir = BUILD_DIR / "bundle-macos" / APP
+        shutil.rmtree(stage_dir.parent, ignore_errors=True)
+        stage_dir.mkdir(parents=True)
+        run(["ditto", ROOT / "dist" / f"{APP}.app", stage_dir / f"{APP}.app"])
+        for f in extra:
+            shutil.copy2(f, stage_dir / f.name)
+            if f.suffix == ".command":
+                os.chmod(stage_dir / f.name, 0o755)
+        shutil.copy2(legal[0], stage_dir / "LIZENZ.txt")
+        shutil.copy2(legal[1], stage_dir / "Fremdkomponenten.md")
+        out.unlink(missing_ok=True)
+        run(["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", stage_dir, out])
+    else:
+        raise ReleaseError("Linux-Bundles sind noch nicht eingerichtet.")
+    log(f"Bundle: {out} ({out.stat().st_size / 1e6:.0f} MB)")
+    return out
+
+
 def build(version: str, platform: str | None = None, skip_tests: bool = False, stage: str = "all") -> Path:
-    """stage: "all", "app" (nur PyInstaller) oder "installer" (vorhandenes dist/ verpacken).
+    """stage: "all" (Programm + ZIP-Bundle), "app" (nur PyInstaller), "bundle" (vorhandenes dist/ als ZIP)
+    oder "installer" (vorhandenes dist/ als Installer – erst sinnvoll mit Code-Signatur).
 
     Getrennte Stufen braucht der GitHub-Build: dazwischen wird die Programmdatei signiert,
     bevor sie in den Installer kommt.
@@ -343,15 +398,17 @@ def build(version: str, platform: str | None = None, skip_tests: bool = False, s
             out = ROOT / "dist" / (f"{APP}.app" if platform == "macos" else APP)
             log(f"Programm: {out}")
             return out
+    if stage in ("all", "bundle"):
+        return make_bundle(version, platform)
     BUILD_DIR.mkdir(exist_ok=True)
     if platform == "windows":
         major, minor, patch, _, n = parse_version(version)
         num = f"{major}.{minor}.{patch}.{n}"  # Windows-Dateiversion muss rein numerisch sein
         run([find_iscc(), f"/DAppVersion={version}", f"/DNumVersion={num}", f"/DSourceDir={ROOT / 'dist' / APP}",
              f"/DOutputDir={BUILD_DIR}", "/Q", ROOT / "installer" / "windows.iss"])
-        out = BUILD_DIR / f"{APP}-{version}{EXT['windows']}"
+        out = BUILD_DIR / f"{APP}-{version}{INSTALLER_EXT['windows']}"
     elif platform == "macos":
-        out = BUILD_DIR / f"{APP}-{version}{EXT['macos']}"
+        out = BUILD_DIR / f"{APP}-{version}{INSTALLER_EXT['macos']}"
         run(["pkgbuild", "--component", ROOT / "dist" / f"{APP}.app", "--install-location", "/Applications",
              "--identifier", "de.akustikmess.app", "--version", version.split("-")[0], out])
     else:
@@ -365,27 +422,55 @@ def build(version: str, platform: str | None = None, skip_tests: bool = False, s
 # --- GitHub und Code-Signatur ----------------------------------------------------------------
 
 def platform_of(filename: str) -> str | None:
-    return next((p for p, ext in EXT.items() if filename.endswith(ext)), None)
+    for table in (EXT, INSTALLER_EXT):
+        for p, ext in table.items():
+            if filename.endswith(ext):
+                return p
+    return None
 
 
 def channel_of(version: str) -> str:
     return "beta" if is_prerelease(version) else "stable"
 
 
+TOKEN_FILE = Path.home() / ".akustikmess" / "github_token"
+
+
+def github_token() -> str:
+    """Zugangsschlüssel für das private Repository (Umgebungsvariable GITHUB_TOKEN oder Datei)."""
+    tok = os.environ.get("GITHUB_TOKEN", "").strip()
+    if not tok and TOKEN_FILE.exists():
+        tok = TOKEN_FILE.read_text(encoding="utf-8").strip()
+    return tok
+
+
+def _gh_headers(accept: str = "application/vnd.github+json") -> dict:
+    from akustik import update  # noqa: PLC0415
+    h = {"Accept": accept, "User-Agent": update.USER_AGENT, "X-GitHub-Api-Version": "2022-11-28"}
+    tok = github_token()
+    if tok:
+        h["Authorization"] = f"Bearer {tok}"
+    return h
+
+
 def github_release(repo: str, version: str) -> dict | None:
-    """Öffentliches GitHub-Release zum Tag v<version> (None, solange es nicht existiert)."""
+    """GitHub-Release zum Tag v<version> (None, solange es nicht existiert). Privat: mit Token."""
     import urllib.error  # noqa: PLC0415
     import urllib.request  # noqa: PLC0415
-    from akustik import update  # noqa: PLC0415
     req = urllib.request.Request(f"https://api.github.com/repos/{repo}/releases/tags/v{version}",
-                                 headers={"Accept": "application/vnd.github+json",
-                                          "User-Agent": update.USER_AGENT})
+                                 headers=_gh_headers())
     try:
         with urllib.request.urlopen(req, timeout=30) as r:  # noqa: S310 – feste https-Adresse
             return json.loads(r.read())
     except urllib.error.HTTPError as exc:
         if exc.code == 404:
+            if not github_token():
+                raise ReleaseError(f"Release v{version} nicht gefunden. Ist das Repository privat? Dann zuerst "
+                                   "`python tools/release.py github-token` ausführen.") from exc
             return None
+        if exc.code in (401, 403):
+            raise ReleaseError("GitHub lehnt den Zugangsschlüssel ab (abgelaufen oder ohne Leserecht auf "
+                               "„Contents“?) – neu anlegen und `release.py github-token` ausführen.") from exc
         raise ReleaseError(f"GitHub antwortet mit {exc.code} für Release v{version}") from exc
 
 
@@ -399,10 +484,32 @@ def release_assets(release: dict | None) -> dict[str, dict]:
     return out
 
 
-def download_file(url: str, target: Path) -> Path:
+class _NoRedirect(__import__("urllib.request").request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):  # Weiterleitung selbst behandeln (ohne Token weitergeben)
+        return None
+
+
+def download_file(url: str, target: Path, api: bool = False) -> Path:
+    """Datei laden. ``api=True``: Release-Datei über die GitHub-API (privates Repository).
+
+    GitHub leitet dann auf einen zeitlich begrenzten Speicher-Link um; der Zugangsschlüssel darf dorthin
+    nicht mitgeschickt werden, deshalb wird die Weiterleitung von Hand ohne Schlüssel verfolgt.
+    """
+    import urllib.error  # noqa: PLC0415
     import urllib.request  # noqa: PLC0415
     from akustik import update  # noqa: PLC0415
     target.parent.mkdir(parents=True, exist_ok=True)
+    if api:
+        opener = urllib.request.build_opener(_NoRedirect)
+        req = urllib.request.Request(url, headers=_gh_headers("application/octet-stream"))
+        try:
+            with opener.open(req, timeout=60) as r, open(target, "wb") as fh:  # noqa: S310
+                shutil.copyfileobj(r, fh, 1 << 20)
+            return target
+        except urllib.error.HTTPError as exc:
+            if exc.code not in (301, 302, 303, 307, 308):
+                raise ReleaseError(f"Download fehlgeschlagen ({exc.code}): {url}") from exc
+            url = exc.headers["Location"]
     req = urllib.request.Request(url, headers={"User-Agent": update.USER_AGENT})
     with urllib.request.urlopen(req, timeout=60) as r, open(target, "wb") as fh:  # noqa: S310
         shutil.copyfileobj(r, fh, 1 << 20)
@@ -625,8 +732,8 @@ def release_via_github(cfg: dict, args) -> None:
         return
     git("push", "--follow-tags", "origin", "HEAD")
     log(f"\n✓ Tag v{version} gepusht. GitHub baut jetzt: https://github.com/{cfg['github']}/actions\n"
-        "  Danach in SignPath die Signatur-Anfragen freigeben und dann:\n"
-        f"    python tools/release.py publish --version {version} --wait")
+        "  Wenn beide Systeme fertig sind (etwa 20–30 min):\n"
+        f"    python tools/release.py publish --version {version} --wait --platform windows --platform macos")
 
 
 def cmd_publish(args) -> None:
@@ -657,11 +764,12 @@ def cmd_publish(args) -> None:
     dl_dir = BUILD_DIR / "github" / version
     for plat in sorted(wanted):  # nur die angeforderten Plattformen übernehmen
         a = assets[plat]
-        path = download_file(a["browser_download_url"], dl_dir / a["name"])
+        path = (download_file(a["url"], dl_dir / a["name"], api=True) if github_token() and a.get("url")
+                else download_file(a["browser_download_url"], dl_dir / a["name"]))
         digest = (a.get("digest") or "").removeprefix("sha256:")
         if digest and digest != sha256_file(path):
             raise ReleaseError(f"{a['name']}: Prüfsumme stimmt nicht mit GitHub überein")
-        if plat == "windows":
+        if plat == "windows" and path.suffix.lower() == ".exe":     # nur Installer werden signiert
             signer = check_windows_signature(path, args.allow_unsigned)
             if signer:
                 log(f"✓ {a['name']} signiert von {signer}")
@@ -678,6 +786,24 @@ def cmd_configure_github(args) -> None:
     cfg["github"] = args.repo
     CONFIG_FILE.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
     log(f"GitHub-Repository gespeichert: https://github.com/{args.repo}")
+
+
+def cmd_github_token(args) -> None:
+    """Zugangsschlüssel (Fine-grained Token, nur Leserecht „Contents“ auf das Repository) sicher speichern."""
+    import getpass  # noqa: PLC0415
+    tok = getpass.getpass("GitHub-Token einfügen (Eingabe wird nicht angezeigt): ").strip()
+    if not tok:
+        raise ReleaseError("Kein Token eingegeben.")
+    TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
+    TOKEN_FILE.write_text(tok + "\n", encoding="utf-8")
+    try:
+        os.chmod(TOKEN_FILE, 0o600)
+    except OSError:
+        pass
+    cfg = load_config()
+    if cfg.get("github"):
+        github_release(cfg["github"], "0.0.0-pruefung")   # wirft bei ungültigem Token
+    log(f"Token gespeichert: {TOKEN_FILE} (nie weitergeben, nicht ins Repository)")
 
 
 def cmd_notes(args) -> None:
@@ -767,13 +893,15 @@ def main(argv=None) -> int:
     p = sub.add_parser("configure-github", help="GitHub-Repository für Build und Signatur festlegen")
     p.add_argument("--repo", required=True, help="NAME/REPOSITORY")
     p.set_defaults(fn=cmd_configure_github)
+    p = sub.add_parser("github-token", help="Zugangsschlüssel für das private GitHub-Repository speichern")
+    p.set_defaults(fn=cmd_github_token)
     p = sub.add_parser("notes", help="Patch Notes einer Version ausgeben")
     p.add_argument("--version")
     p.set_defaults(fn=cmd_notes)
     p = sub.add_parser("build", help="Installer für dieses System bauen, ohne zu veröffentlichen")
     p.add_argument("--skip-tests", action="store_true")
-    p.add_argument("--stage", choices=["all", "app", "installer"], default="all",
-                   help="nur Programm (app) oder nur Installer aus vorhandenem dist/ (installer)")
+    p.add_argument("--stage", choices=["all", "app", "bundle", "installer"], default="all",
+                   help="nur Programm (app), nur ZIP-Bundle (bundle) oder Installer (installer) aus dist/")
     p.set_defaults(fn=cmd_build)
     p = sub.add_parser("add-asset", help="Installer einer anderen Plattform (z. B. macOS) hinzufügen")
     p.add_argument("--platform", choices=["windows", "macos", "linux"], required=True)

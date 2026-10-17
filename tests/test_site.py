@@ -25,7 +25,7 @@ def test_all_pages_and_wiki(tmp_path):
         assert "{{" not in text, p
         assert not re.search(r"<script(?![^>]*\bsrc=)[^>]*>", text), f"Inline-Script in {p}"   # CSP
         assert " style=" not in text, f"Inline-Style in {p}"
-        assert "https://github.com/Kulow00/AkustikMess/issues" in text
+        assert "https://github.com/Kulow00/AkustikMess-Feedback" in text
     imp = (out / "impressum.html").read_text(encoding="utf-8")
     assert "Weg 1<br>12345 Ort" in imp and "mailto:k@example.de" in imp
     wiki = (out / "wiki" / "echtzeit.html").read_text(encoding="utf-8")

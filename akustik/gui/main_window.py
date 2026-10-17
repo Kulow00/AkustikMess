@@ -7,7 +7,7 @@ import os
 import numpy as np
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from .. import APP_NAME, __version__
+from .. import APP_NAME, __version__, license_config
 from ..dsp.generator import GENERATORS, PeriodicPinkNoise, Sine
 from .audio_dialog import AudioDialog
 from .common import set_channel_count
@@ -218,6 +218,8 @@ class MainWindow(QtWidgets.QMainWindow):
                                   triggered=self.show_shortcuts))
         m.addSeparator()
         m.addAction(QtGui.QAction("Nach Updates suchen…", self, triggered=self.open_updates))
+        m.addAction(QtGui.QAction("Fehler melden / Idee vorschlagen…", self, triggered=lambda: (
+            QtGui.QDesktopServices.openUrl(QtCore.QUrl(license_config.FEEDBACK_URL)))))
         self.a_license = QtGui.QAction("Lizenz…", self, triggered=self.open_license)
         self.a_license.setVisible(self.licenses.enabled)
         m.addAction(self.a_license)

@@ -2,9 +2,10 @@
 
 ## Windows: „Smart App Control hat eine App blockiert“
 
-Smart App Control lässt nur signierte Programme zu. Signierte Installer erkennst du in den Datei-Eigenschaften
-unter **Digitale Signaturen** („SignPath Foundation“). Ältere, unsignierte Versionen lassen sich mit Smart App
-Control nicht installieren – bitte die aktuelle Version laden.
+AkustikMess ist (noch) nicht digital signiert. Windows markiert heruntergeladene Dateien; Smart App Control blockiert
+markierte, unsignierte Programme. **„AkustikMess starten.bat“** entfernt diese Markierung für den AkustikMess-Ordner.
+Blockiert Windows trotzdem: Ordner löschen, **Rechtsklick auf die heruntergeladene ZIP-Datei → Eigenschaften → unten
+„Zulassen“ anhaken → OK**, dann erneut entpacken. Die entpackten Dateien sind dann nicht mehr markiert.
 
 ## Windows: „Der Computer wurde durch Windows geschützt“
 

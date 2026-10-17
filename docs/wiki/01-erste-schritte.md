@@ -2,10 +2,17 @@
 
 ## Installieren
 
-- **Windows 10/11:** Installer von der Download-Seite laden und starten. Es werden keine Administratorrechte benötigt.
-- **macOS:** `.pkg`-Datei öffnen. Beim ersten Start blockiert macOS das Programm, weil es nicht über das
-  Apple-Entwicklerprogramm beglaubigt ist: **Systemeinstellungen → Datenschutz & Sicherheit → „Dennoch öffnen“**.
-  Danach den Mikrofonzugriff erlauben.
+AkustikMess wird als ZIP-Datei verteilt – keine Installation, keine Administratorrechte. Die Download-Seite bietet
+automatisch die passende Datei für dein System an.
+
+- **Windows 10/11:** ZIP entpacken (Rechtsklick → „Alle extrahieren“), den Ordner **AkustikMess** an einen festen Platz
+  legen (z. B. *Dokumente*) und **„AkustikMess starten.bat“** doppelklicken. Fragt Windows nach, „Ausführen“ wählen.
+  Tipp: Rechtsklick auf die .bat → „Verknüpfung erstellen“ und die Verknüpfung auf den Desktop ziehen.
+- **macOS:** ZIP öffnen, den Ordner **AkustikMess** z. B. in *Programme* legen. Beim ersten Mal
+  **Rechtsklick auf „AkustikMess starten.command“ → Öffnen → Öffnen** (AkustikMess ist nicht von Apple beglaubigt,
+  ein Doppelklick wird deshalb beim ersten Mal blockiert). Danach den Mikrofonzugriff erlauben.
+
+Updates lädt AkustikMess selbst und tauscht dabei die Programmdateien im Ordner aus.
 
 Beim ersten Start fragt AkustikMess, ob es automatisch nach Updates suchen darf. Ohne Zustimmung baut das
 Programm keine Verbindung ins Internet auf.

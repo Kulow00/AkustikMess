@@ -18,7 +18,7 @@ def windows_version_info():
     strings = [StringStruct("ProductName", "AkustikMess"), StringStruct("FileDescription", "AkustikMess"),
                StringStruct("ProductVersion", APP_VERSION), StringStruct("FileVersion", APP_VERSION),
                StringStruct("OriginalFilename", "AkustikMess.exe"), StringStruct("InternalName", "AkustikMess"),
-               StringStruct("LegalCopyright", "© 2026 Alex Kulow · GPL-3.0-or-later")]
+               StringStruct("LegalCopyright", "© 2026 Alex Kulow. Alle Rechte vorbehalten.")]
     return VSVersionInfo(ffi=FixedFileInfo(filevers=nums, prodvers=nums),
                          kids=[StringFileInfo([StringTable("040704B0", strings)]),
                                VarFileInfo([VarStruct("Translation", [0x0407, 1200])])])

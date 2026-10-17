@@ -90,31 +90,24 @@ Datenschutzerklärung).
 | Bereich | Maßnahme |
 |---|---|
 | Lizenzen | Ed25519-Signaturen, zwei Aussteller mit getrennten Rechten, Root-Schlüssel nur offline |
-| Updates | signiertes `releases.json` (eigener Schlüssel) + SHA-256 je Datei + Windows-Code-Signatur (SignPath) |
+| Updates | signiertes `releases.json` (eigener Schlüssel) + SHA-256 je Datei; Selbsttest jedes gebauten Programms |
 | Webseite | nur HTTPS mit HSTS, strenge Content-Security-Policy (kein Inline-JavaScript, keine Fremd-Inhalte), X-Frame-Options, kein Tracking |
 | Lizenzserver | kein offener Port (nur über Caddy), läuft als Nicht-root, Dateisystem schreibgeschützt, alle Rechte entzogen, 256 MB Speicher; Anfragen max. 4 KB, nur JSON; Ratenbegrenzung je IP und je E-Mail; keine Admin-Schnittstelle im Netz (Verwaltung nur per `docker exec`) |
 | Daten | nur Name + E-Mail + Zeitstempel; keine IP-Adressen gespeichert; unbestätigte Anfragen nach 48 h gelöscht; Löschbefehl für DSGVO-Anfragen |
 | Upload | SFTP nur mit Schlüssel, festgelegter Host-Schlüssel, chroot-Benutzer ohne Shell |
 | Schlüssel | alle privaten Schlüssel in `~/.akustikmess` (Laptop) bzw. `/srv/akmess/license/data` (Server); nie im Repository |
 
-## Wichtig: Open Source und Bezahlmodell
+## Lizenz und Bezahlmodell (Closed Source)
 
-AkustikMess steht unter der **GPL-3.0**. Das bedeutet für ein späteres Bezahlmodell:
+AkustikMess ist seit Version 0.5.0-beta.6 **Closed Source** (siehe LICENSE): Quellcode privat, Nutzung kostenlos
+nach den Nutzungsbedingungen. Damit ist die Lizenzprüfung ein echtes Werkzeug für ein späteres Bezahlmodell
+(z. B. Pro-Funktionen per `licenses.has("pro")`). Zu beachten:
 
-- **Erlaubt und üblich:** offizielle Installer, Support, Schulungen oder Zusatzfunktionen gegen Geld anbieten.
-- **Nicht verhinderbar:** Wer den Quellcode nimmt, kann die Lizenzprüfung entfernen und eine eigene Fassung bauen
-  (muss diese aber wieder unter der GPL veröffentlichen). Die Lizenzprüfung ist bei Open Source eine
-  Erinnerung und ein Komfort, kein Kopierschutz.
-- **Dein Spielraum als Urheber:** Du kannst künftige Versionen oder Zusatzmodule unter einer anderen Lizenz
-  veröffentlichen (dafür sorgt CONTRIBUTING.md bei fremden Beiträgen). Bereits veröffentlichte Versionen bleiben
-  dauerhaft GPL.
-- **SignPath Foundation:** Die kostenlose Signatur gilt für Open-Source-Projekte. Vor einem Bezahlmodell bei
-  SignPath nachfragen, ob das Projekt so weiter gefördert wird – sonst wird ein eigenes Zertifikat nötig
-  (ca. 100–250 €/Jahr).
-
-Empfohlener Weg, falls es kostenpflichtig werden soll: **Open-Core** – die Messsoftware bleibt GPL und kostenlos,
-Pro-Funktionen (z. B. Mehrkanal-Messung, Berichte, Projektverwaltung) kommen als separates, nicht-öffentliches
-Modul, das per `licenses.has("pro")` freigeschaltet wird.
+- Versionen bis 0.5.0-beta.5 wurden unter der GPL 3.0 verbreitet – wer sie hat, darf sie weiter unter der GPL nutzen.
+- Qt/PySide6 steht unter der LGPL: Die Qt-Bibliotheken liegen als austauschbare DLLs/Frameworks im Programmordner;
+  Lizenzhinweise stehen in „Fremdkomponenten.md“. Daran nichts ändern (z. B. Qt nicht statisch einbinden).
+- Die kostenlose Code-Signatur der SignPath Foundation steht nur Open-Source-Projekten offen. Für signierte
+  Installer ist ein eigenes Zertifikat nötig (ca. 100–250 €/Jahr); bis dahin wird als ZIP-Bundle verteilt.
 
 ## Fahrplan
 

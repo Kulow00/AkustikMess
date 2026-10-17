@@ -143,8 +143,8 @@ def test_publish_selfhosted(tmp_path, monkeypatch):
     m = update.parse_manifest((pub / "releases.json").read_bytes(), PUB)
     r = m["releases"][0]
     assert set(r["assets"]) == {"windows", "macos"} and r["notes"] == "- A"
-    assert r["assets"]["windows"]["url"] == "https://dl.example.de/am/files/AkustikMess-0.5.0-beta.1-Windows-Setup.exe"
-    assert (pub / "files" / "AkustikMess-0.5.0-beta.1-macOS.pkg").read_bytes() == b"mac-0.5.0-beta.1"
+    assert r["assets"]["windows"]["url"] == "https://dl.example.de/am/files/AkustikMess-0.5.0-beta.1-Windows.zip"
+    assert (pub / "files" / "AkustikMess-0.5.0-beta.1-macOS.zip").read_bytes() == b"mac-0.5.0-beta.1"
     assert (pub / "index.html").exists() and m["channels"] == {"beta": "0.5.0-beta.1"}
 
 
@@ -161,8 +161,8 @@ def test_publish_dropbox_keeps_stable_names(tmp_path, monkeypatch):
     assert newest["version"] == "0.5.1" and "dl=1" in newest["assets"]["windows"]["url"]
     assert older["assets"] == {}            # Datei wurde überschrieben → kein Download mehr, Notizen bleiben
     assert older["notes"] == "- 0.5.0"
-    assert (pub / "stable" / "AkustikMess-stable-Windows-Setup.exe").read_bytes() == b"0.5.1"
-    assert (pub / "archiv" / "AkustikMess-0.5.0-Windows-Setup.exe").exists()
+    assert (pub / "stable" / "AkustikMess-stable-Windows.zip").read_bytes() == b"0.5.1"
+    assert (pub / "archiv" / "AkustikMess-0.5.0-Windows.zip").exists()
 
 
 # --- Download über einen lokalen Server --------------------------------------------------------
@@ -214,3 +214,50 @@ def test_keygen_writes_public_key(tmp_path):
     cfg.write_text('MANIFEST_URL = ""\nPUBLIC_KEY = ""\n', encoding="utf-8")
     release.write_update_config("https://x/releases.json", pub, cfg)
     assert f'PUBLIC_KEY = "{pub}"' in cfg.read_text() and "https://x/releases.json" in cfg.read_text()
+
+
+def test_bundle_update_replaces_program_folder(tmp_path):
+    """ZIP-Update: Programmteile ersetzen, alte Reste entfernen, eigene Dateien im Ordner behalten."""
+    import os
+    import subprocess
+    import sys
+    import zipfile
+
+    if sys.platform != "win32":
+        pytest.skip("Windows-Austauschskript")
+    z = tmp_path / "AkustikMess-9.9.9-Windows.zip"
+    with zipfile.ZipFile(z, "w") as zf:
+        zf.writestr("AkustikMess/AkustikMess.exe", "NEU")
+        zf.writestr("AkustikMess/_internal/neu.dll", "x")
+        zf.writestr("AkustikMess/AkustikMess starten.bat", "@echo off")
+    target = tmp_path / "Programm mit Leerzeichen"
+    (target / "_internal").mkdir(parents=True)
+    (target / "AkustikMess.exe").write_text("ALT")
+    (target / "_internal" / "alt.dll").write_text("y")
+    (target / "meine Sitzung.akmess").write_text("bleibt")
+    done = subprocess.run([sys.executable, "-c", "pass"])               # beendeter Prozess als „altes Programm“
+    del done
+    script = update.prepare_bundle_update(str(z), target=target, platform="windows", pid=999999, restart=False)
+    work = os.path.dirname(script)
+    subprocess.run(["cmd", "/c", script], check=False, timeout=60)
+    assert (target / "AkustikMess.exe").read_text() == "NEU"
+    assert (target / "_internal" / "neu.dll").exists() and not (target / "_internal" / "alt.dll").exists()
+    assert (target / "meine Sitzung.akmess").read_text() == "bleibt"
+    assert (target / "AkustikMess starten.bat").exists() and not os.path.exists(work)
+
+
+def test_bundle_update_rejects_bad_zip(tmp_path):
+    import zipfile
+    z = tmp_path / "x.zip"
+    with zipfile.ZipFile(z, "w") as zf:
+        zf.writestr("../../boese.txt", "x")
+    with pytest.raises(update.UpdateError):
+        update.prepare_bundle_update(str(z), target=tmp_path / "t", platform="windows", pid=1, restart=False)
+    z2 = tmp_path / "leer.zip"
+    with zipfile.ZipFile(z2, "w") as zf:
+        zf.writestr("anderes/readme.txt", "x")
+    with pytest.raises(update.UpdateError, match="kein AkustikMess"):
+        update.prepare_bundle_update(str(z2), target=tmp_path / "t", platform="windows", pid=1, restart=False)
+    sh = update.bundle_update_script("/tmp/neu/AkustikMess.app", "/Applications/AkustikMess.app", 42, "macos",
+                                     "/tmp/neu", restart=True)
+    assert "kill -0 42" in sh and 'open "/Applications/AkustikMess.app"' in sh and "quarantine" in sh
