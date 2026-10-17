@@ -143,7 +143,7 @@ def test_publish_selfhosted(tmp_path, monkeypatch):
     m = update.parse_manifest((pub / "releases.json").read_bytes(), PUB)
     r = m["releases"][0]
     assert set(r["assets"]) == {"windows", "macos"} and r["notes"] == "- A"
-    assert r["assets"]["windows"]["url"] == "https://dl.example.de/am/files/AkustikMess-0.5.0-beta.1-Windows.zip"
+    assert r["assets"]["windows"]["url"] == "https://dl.example.de/am/api/file/AkustikMess-0.5.0-beta.1-Windows.zip"
     assert (pub / "files" / "AkustikMess-0.5.0-beta.1-macOS.zip").read_bytes() == b"mac-0.5.0-beta.1"
     assert (pub / "index.html").exists() and m["channels"] == {"beta": "0.5.0-beta.1"}
 
@@ -261,3 +261,38 @@ def test_bundle_update_rejects_bad_zip(tmp_path):
     sh = update.bundle_update_script("/tmp/neu/AkustikMess.app", "/Applications/AkustikMess.app", 42, "macos",
                                      "/tmp/neu", restart=True)
     assert "kill -0 42" in sh and 'open "/Applications/AkustikMess.app"' in sh and "quarantine" in sh
+
+
+def test_download_sends_license_and_explains_403(tmp_path):
+    """Updates nur mit Lizenz: Schlüssel im Header, verständliche Meldung ohne Lizenz."""
+    import hashlib
+    payload = b"ZIP" * 1000
+    seen = []
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            seen.append(self.headers.get("X-AKM-License"))
+            if self.headers.get("X-AKM-License") != "AKM1.gueltig":
+                self.send_response(403)
+                self.end_headers()
+                return
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        asset = {"file": "AkustikMess-9.0.0-Windows.zip", "url": f"http://127.0.0.1:{srv.server_address[1]}/api/file/x",
+                 "sha256": hashlib.sha256(payload).hexdigest(), "size": len(payload)}
+        with pytest.raises(update.UpdateError, match="gültige Lizenz"):
+            update.download(asset)
+        assert Path(update.download(asset, license_key="AKM1.gueltig")).read_bytes() == payload
+        assert seen == [None, "AKM1.gueltig"]
+    finally:
+        srv.shutdown()
+        srv.server_close()

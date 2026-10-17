@@ -41,14 +41,15 @@ class _DownloadWorker(QtCore.QThread):
     progress = QtCore.Signal(int, int)
     done = QtCore.Signal(str, str)      # Pfad, Fehlermeldung
 
-    def __init__(self, asset: dict):
+    def __init__(self, asset: dict, license_key: str = ""):
         super().__init__()
-        self.asset = asset
+        self.asset, self.license_key = asset, license_key
         self.cancelled = False
 
     def run(self) -> None:
         try:
-            path = update.download(self.asset, progress=self.progress.emit, cancel=lambda: self.cancelled)
+            path = update.download(self.asset, progress=self.progress.emit, cancel=lambda: self.cancelled,
+                                   license_key=self.license_key)
             self.done.emit(path, "")
         except update.UpdateError as exc:
             self.done.emit("", str(exc))
@@ -263,7 +264,8 @@ class UpdateDialog(QtWidgets.QDialog):
         self.btn_check.setEnabled(False)
         self.progress.setVisible(True)
         self.progress.setRange(0, max(1, int(self.upd.asset.get("size") or 0)))
-        self.dl = _DownloadWorker(self.upd.asset)
+        lic = getattr(self.win, "licenses", None)
+        self.dl = _DownloadWorker(self.upd.asset, lic.token if lic is not None and lic.status().valid else "")
         self.dl.progress.connect(lambda d, t: self.progress.setValue(d))
         self.dl.done.connect(self._downloaded)
         self.dl.start()

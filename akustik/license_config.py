@@ -15,13 +15,13 @@ SERVER_PLANS = ("community",)
 
 # Wie streng dieser Build ist:
 #   "off"      – keine Lizenzfunktionen sichtbar
-#   "remind"   – alles nutzbar, Hinweis „kostenlos registrieren“ (aktueller Stand)
+#   "remind"   – alles nutzbar, Hinweis „Lizenz anfragen“ (aktueller Stand; Updates brauchen eine Lizenz)
 #   "required" – ohne gültige Lizenz startet keine Messung
 ENFORCEMENT = "remind"
 
 # Webseite mit Registrierung und Sperrliste
 SITE_URL = "https://akmess.alex-kulow.de"
-REGISTER_URL = SITE_URL + "/registrieren.html"
+REGISTER_URL = SITE_URL + "/registrieren.html"   # Lizenz anfragen
 REVOCATIONS_URL = SITE_URL + "/api/revocations"
 # Öffentliches Repository nur für Fehlermeldungen und Ideen (der Quellcode ist privat)
 FEEDBACK_URL = "https://github.com/Kulow00/AkustikMess-Feedback/issues/new/choose"

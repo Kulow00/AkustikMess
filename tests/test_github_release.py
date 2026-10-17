@@ -54,7 +54,7 @@ def test_publish_takes_signed_installer_from_github(gh):
     r = m["releases"][0]
     assert r["version"] == VERSION and r["channel"] == "beta" and r["notes"] == "- Signiert"
     a = r["assets"]["windows"]
-    assert a["url"] == f"https://akmess.example.de/files/{SETUP}"
+    assert a["url"] == f"https://akmess.example.de/api/file/{SETUP}"
     assert (gh["pub"] / "files" / SETUP).read_bytes() == gh["payload"]
     page = (gh["pub"] / "index.html").read_text(encoding="utf-8")
     assert "https://github.com/Kulow00/AkustikMess-Feedback/issues" in page and "{{" not in page

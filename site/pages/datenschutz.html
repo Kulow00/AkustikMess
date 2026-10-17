@@ -16,15 +16,17 @@
   Abwehr von Angriffen verwendet und nicht dauerhaft gespeichert bzw. spätestens nach {{log_days}} Tagen
   gelöscht. Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO (sicherer Betrieb der Webseite).</p>
 
-<h2>4. Registrierung und Lizenz</h2>
-<p>Für einen Lizenzschlüssel speichern wir <b>Name bzw. Firma, E-Mail-Adresse, Zeitpunkt der Registrierung und
-  Einwilligung sowie den ausgestellten Schlüssel</b>. Name und E-Mail-Adresse stehen auch im Schlüssel selbst,
+<h2>4. Lizenzanfrage, Lizenz und Download</h2>
+<p>Für eine Lizenz speichern wir <b>Name, E-Mail-Adresse, deine optionalen Angaben (Firma/Einsatzzweck),
+  Zeitpunkt der Anfrage, Einwilligung und Freigabe sowie den ausgestellten Schlüssel</b>. Die Anfrage wird zur
+  Prüfung per E-Mail an den Verantwortlichen weitergeleitet. Download-Links bestehen aus zufälligen, einmal
+  nutzbaren Codes mit Ablaufdatum; gespeichert wird nur eine Prüfsumme davon. Name und E-Mail-Adresse stehen auch im Schlüssel selbst,
   damit das Programm anzeigen kann, für wen es lizenziert ist. Zweck: Ausstellung und Verwaltung der Lizenz,
   Zusendung des Schlüssels und Information über wesentliche Änderungen der Lizenzbedingungen. Rechtsgrundlage
   ist deine Einwilligung (Art. 6 Abs. 1 lit. a DSGVO) bzw. die Durchführung des Lizenzverhältnisses
   (Art. 6 Abs. 1 lit. b DSGVO). Deine IP-Adresse wird dabei nicht gespeichert; sie wird nur kurzzeitig im
   Arbeitsspeicher gehalten, um Missbrauch (massenhafte Anfragen) zu verhindern.</p>
-<p>Nicht bestätigte Registrierungen werden nach 48 Stunden gelöscht. Die übrigen Daten speichern wir, solange
+<p>Nicht bearbeitete oder abgelehnte Anfragen werden nach 60 Tagen gelöscht. Die übrigen Daten speichern wir, solange
   die Lizenz besteht. Auf Wunsch löschen wir Name und E-Mail-Adresse jederzeit; die Lizenz wird dann gesperrt.
   Der Versand der E-Mails erfolgt über {{mail_provider}}.</p>
 
@@ -34,10 +36,13 @@
 <ul>
   <li><b>Update-Suche</b> (nur nach Zustimmung beim ersten Start): Das Programm lädt die öffentliche Versionsliste
     und die Sperrliste für Lizenzen von diesem Server. Dabei werden – wie bei jedem Webseitenaufruf – IP-Adresse
-    und Programmversion übertragen (siehe Abschnitt 3), aber keine Lizenz- oder Messdaten.</li>
+    und Programmversion übertragen (siehe Abschnitt 3), aber keine Messdaten.</li>
+  <li><b>Update herunterladen</b> (nur nach deiner Bestätigung): Das Programm sendet deinen Lizenzschlüssel an
+    diesen Server, damit er prüfen kann, ob du zum Download berechtigt bist. Der Schlüssel ist dem Server
+    bereits bekannt; es werden keine weiteren Daten übertragen.</li>
   <li><b>Fernbedienung</b> (standardmäßig aus): Verbindung nur im lokalen Netzwerk, nichts geht ins Internet.</li>
 </ul>
-<p>Der Lizenzschlüssel wird ausschließlich auf deinem Rechner geprüft.</p>
+<p>Im Programm selbst wird der Lizenzschlüssel nur auf deinem Rechner geprüft.</p>
 
 <h2>6. GitHub (Fehlermeldungen)</h2>
 <p>Fehlermeldungen und Vorschläge werden in einem öffentlichen GitHub-Repository gesammelt (GitHub Inc., USA). Wenn

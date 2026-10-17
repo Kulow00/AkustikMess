@@ -46,20 +46,17 @@ function newest(chans,platform){
 function render(){
   const chans=channel==="beta"?["stable","beta"]:["stable"];
   const os=LABEL[OS]?OS:"windows";
-  const rel=newest(chans,os),dl=document.getElementById("dl");
-  if(rel){const a=rel.assets[os];dl.href=a.url;dl.className="primary";
-    const kind=/\.zip$/i.test(a.file||"")?" (ZIP)":"";
-    dl.innerHTML="Für "+LABEL[os]+" herunterladen"+kind+" &nbsp;·&nbsp; Version "+esc(rel.version)+(rel.channel==="beta"?' <span class="badge">Beta</span>':"");
-    document.getElementById("meta").innerHTML=esc(a.file)+" · "+fmtSize(a.size)+" · "+esc(rel.date)+
-      "<br>SHA-256: <code>"+esc(a.sha256)+"</code>"}
-  else{dl.className="primary disabled";dl.textContent="Für "+LABEL[os]+" noch nicht verfügbar";
-    document.getElementById("meta").textContent=""}
-  if(OS==="ios"||OS==="android")document.getElementById("meta").innerHTML+=
-    "<br><b>Hinweis:</b> AkustikMess läuft auf Windows und macOS. Auf dem Handy dient es als Fernbedienung (QR-Code im Programm).";
+  const rel=newest(chans,os),cur=document.getElementById("current"),meta=document.getElementById("meta");
+  if(rel){const a=rel.assets[os];
+    cur.innerHTML="Aktuelle Version für <b>"+LABEL[os]+"</b>: "+esc(rel.version)+(rel.channel==="beta"?' <span class="badge">Beta</span>':"");
+    meta.innerHTML=esc(a.file)+" · "+fmtSize(a.size)+" · "+esc(rel.date)+"<br>SHA-256: <code>"+esc(a.sha256)+"</code>"}
+  else{cur.textContent="Für "+LABEL[os]+" ist noch keine Version verfügbar.";meta.textContent=""}
   const others=[];
   for(const p of ["windows","macos","linux"]){if(p===os)continue;const r=newest(chans,p);
-    if(r)others.push('<a href="'+esc(r.assets[p].url)+'">'+LABEL[p]+" (Version "+esc(r.version)+")</a>")}
-  document.getElementById("others").innerHTML=others.length?"Andere Systeme: "+others.join(""):"";
+    if(r)others.push(LABEL[p]+" "+esc(r.version))}
+  if(others.length)meta.innerHTML+="<br>Ebenfalls verfügbar: "+others.join(", ");
+  if(OS==="ios"||OS==="android")meta.innerHTML+=
+    "<br><b>Hinweis:</b> AkustikMess läuft auf Windows und macOS. Auf dem Handy dient es als Fernbedienung (QR-Code im Programm).";
   document.getElementById("hint").innerHTML=HINT[os];
   const notes=data.releases.filter(r=>chans.includes(r.channel)).sort((a,b)=>cmp(b.version,a.version)).slice(0,12);
   document.getElementById("notes").innerHTML=notes.map(r=>"<h3>"+esc(r.version)+(r.channel==="beta"?' <span class="badge">Beta</span>':"")+
@@ -74,4 +71,4 @@ fetch("releases.json",{cache:"no-store"}).then(r=>r.json()).then(o=>{data=JSON.p
   const os=LABEL[OS]?OS:"windows";
   if(!newest(["stable"],os)&&newest(["stable","beta"],os))channel="beta";
   render()})
- .catch(()=>{document.getElementById("dl").textContent="Release-Verzeichnis nicht erreichbar"});
+ .catch(()=>{document.getElementById("current").textContent="Versionsinfo nicht erreichbar"});

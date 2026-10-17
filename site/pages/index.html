@@ -1,10 +1,10 @@
 <!-- title: Messsoftware für Beschallung und Raumakustik -->
-<!-- scripts: assets/download.js -->
+<!-- scripts: assets/download.js,assets/redownload.js -->
 <section>
   <h1>Messsoftware für Beschallung und Raumakustik</h1>
   <p class="lead">AkustikMess misst Lautsprechersysteme und Räume mit einem Messmikrofon und einem
     handelsüblichen Audio-Interface – kostenlos, für Windows und macOS.</p>
-  <p><a class="primary hero" href="#download">Kostenlos herunterladen</a>
+  <p><a class="primary hero" href="#download">Kostenlos nutzen</a>
     <a class="ghost" href="wiki/erste-schritte.html">Erste Schritte</a></p>
 </section>
 
@@ -25,12 +25,32 @@
   <button id="tBeta">Beta <span class="badge">Vorabversion</span></button>
 </div>
 <div class="card">
-  <a id="dl" class="primary disabled" href="#">Lade …</a>
+  <p id="current">Lade Versionsinfo …</p>
   <div class="meta" id="meta"></div>
-  <div class="others" id="others"></div>
+  <p>AkustikMess ist kostenlos. Zum Herunterladen brauchst du eine <b>persönliche Lizenz</b>.</p>
+  <div class="grid">
+    <div class="card">
+      <h3>Neu hier?</h3>
+      <p>Lizenz anfragen. Nach der Freigabe bekommst du Lizenzschlüssel und einen Download-Link per E-Mail.</p>
+      <a class="primary" href="registrieren.html">Lizenz anfragen</a>
+    </div>
+    <div class="card">
+      <h3>Ich habe eine Lizenz</h3>
+      <form id="redl" novalidate>
+        <label for="rdKey">Lizenzschlüssel</label>
+        <textarea id="rdKey" class="key" rows="3" placeholder="AKM1.…"></textarea>
+        <p class="hint">oder E-Mail-Adresse und Lizenz-ID (aus der Lizenz-E-Mail):</p>
+        <label for="rdMail">E-Mail-Adresse</label>
+        <input type="email" id="rdMail" autocomplete="email">
+        <label for="rdId">Lizenz-ID</label>
+        <input type="text" id="rdId" placeholder="L-…">
+        <p><button class="primary" id="rdSend" type="submit">Herunterladen</button></p>
+      </form>
+      <div id="rdMsg" class="msg" role="status"></div>
+    </div>
+  </div>
 </div>
 <div class="card hint" id="hint"></div>
-{{register_teaser}}
 <div class="card notes"><h2>Neuerungen</h2><div id="notes">–</div></div>
 
 <div class="card">

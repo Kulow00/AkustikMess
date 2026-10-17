@@ -106,7 +106,7 @@ class LicenseDialog(QtWidgets.QDialog):
         self.btn_apply.clicked.connect(self.apply)
         btn_file = QtWidgets.QPushButton("Aus Datei laden…")
         btn_file.clicked.connect(self.load_file)
-        self.btn_register = QtWidgets.QPushButton("Kostenlos registrieren…")
+        self.btn_register = QtWidgets.QPushButton("Lizenz anfragen…")
         self.btn_register.clicked.connect(
             lambda: QtGui.QDesktopServices.openUrl(QtCore.QUrl(license_config.REGISTER_URL)))
         self.btn_remove = QtWidgets.QPushButton("Lizenz entfernen")
@@ -137,8 +137,8 @@ class LicenseDialog(QtWidgets.QDialog):
             text += (f"<br>Lizenziert für: {lic.name} &lt;{lic.email}&gt;<br>Plan: {lic.plan_label} · "
                      f"Lizenz-ID: {lic.id} · ausgestellt am {lic.issued}")
         elif st.state == "none":
-            text += (f"<br>{APP_NAME} ist kostenlos. Mit einer Registrierung bekommst du einen persönlichen "
-                     "Lizenzschlüssel und hilfst bei der Weiterentwicklung.")
+            text += (f"<br>{APP_NAME} ist kostenlos nutzbar. Für Downloads und Updates ist eine persönliche "
+                     "Lizenz nötig – auf der Website anfragen, nach Freigabe kommt der Schlüssel per E-Mail.")
         self.lbl_status.setText(text)
         self.btn_remove.setVisible(bool(self.mgr.token))
         self.btn_register.setVisible(st.state != "valid")

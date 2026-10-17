@@ -11,8 +11,10 @@ services:
     env_file: .env            # SMTP-Zugangsdaten, siehe .env.example – nie ins Repository
     environment:
       AKM_SITE: https://akmess.alex-kulow.de
+      AKM_WWW: /www
     volumes:
       - ./data:/data          # Datenbank + Serverschlüssel → in die Server-Sicherung aufnehmen
+      - /srv/akmess/www:/www:ro   # Veröffentlichungsordner (nur lesend): Programmdateien + releases.json
     networks: [caddy]
     read_only: true
     tmpfs: [/tmp]

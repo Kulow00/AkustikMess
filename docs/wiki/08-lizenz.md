@@ -1,12 +1,16 @@
-# Lizenz und Registrierung
+# Lizenz anfragen
 
-AkustikMess ist **kostenlos** nutzbar (siehe [Nutzungsbedingungen](../nutzungsbedingungen.html)). Mit einer
-kostenlosen Registrierung bekommst du einen persönlichen Lizenzschlüssel.
+AkustikMess ist **kostenlos** nutzbar (siehe [Nutzungsbedingungen](../nutzungsbedingungen.html)). Für Download und
+Updates brauchst du eine persönliche Lizenz – sie wird auf Anfrage kostenlos ausgestellt.
 
-## Schlüssel bekommen
+## Lizenz anfragen und herunterladen
 
-Auf der Seite [Lizenz](../registrieren.html) Name und E-Mail-Adresse eingeben. Nach Bestätigung der
-E-Mail-Adresse erhältst du den Schlüssel per E-Mail und direkt auf der Webseite.
+1. Auf der Seite [Lizenz anfragen](../registrieren.html) Name, E-Mail-Adresse und optional Firma/Einsatzzweck
+   eingeben. Du bekommst eine Eingangsbestätigung per E-Mail.
+2. Die Anfrage wird geprüft und freigegeben. Dann kommt eine E-Mail mit deinem **Lizenzschlüssel** und einem
+   **Download-Link** – der Link funktioniert **einmal** und 7 Tage lang.
+3. **Später erneut herunterladen** (anderer Rechner, neue Version): Startseite → *Download* → **„Ich habe eine
+   Lizenz“** → Lizenzschlüssel einfügen oder E-Mail-Adresse und Lizenz-ID angeben → neuer Download-Link.
 
 ## Schlüssel eintragen
 
@@ -26,15 +30,19 @@ bestimmten Datum erschienen sind – ältere Versionen laufen unbegrenzt weiter.
 
 ## Datenschutz
 
-- Der Schlüssel wird **nur auf deinem Rechner** geprüft. Es werden keine Daten gesendet.
+- Im Programm wird der Schlüssel **nur auf deinem Rechner** geprüft. Nur beim Herunterladen eines Updates
+  schickt AkustikMess ihn an den eigenen Server, um die Berechtigung zu prüfen.
 - Gesperrte Lizenzen (z. B. bei Missbrauch) erkennt das Programm über die Update-Suche – nur wenn du sie
   erlaubt hast.
 - Löschung deiner Daten: E-Mail an die Adresse im Impressum.
 
 ## Häufige Fragen
 
-**Schlüssel verloren?** Einfach erneut mit derselben E-Mail-Adresse registrieren, der Schlüssel wird noch einmal
-zugeschickt.
+**Schlüssel verloren?** Einfach erneut mit derselben E-Mail-Adresse anfragen – Schlüssel und ein neuer
+Download-Link werden noch einmal an diese Adresse geschickt.
+
+**Updates?** Mit eingetragener Lizenz lädt AkustikMess Updates selbst (Hilfe → Nach Updates suchen…). Ohne Lizenz
+meldet das Programm, dass zuerst eine Lizenz eingetragen werden muss.
 
 **Mehrere Rechner?** Die Community-Lizenz darf auf allen deinen Rechnern verwendet werden.
 

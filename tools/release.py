@@ -244,6 +244,9 @@ def asset_target(cfg: dict, version: str, channel: str, platform: str, ext: str 
         link = cfg["dropbox_links"].get(f"{channel}/{platform}")
         return rel, direct_url(link) if link else None
     rel = f"files/{APP}-{version}{ext}"
+    if cfg.get("download_gate", True):
+        # Dateien liegen weiter unter files/, abgerufen werden sie nur über den Lizenzserver (mit Lizenz)
+        return rel, cfg["base_url"].rstrip("/") + f"/api/file/{APP}-{version}{ext}"
     return rel, cfg["base_url"].rstrip("/") + "/" + rel
 
 

@@ -1,34 +1,39 @@
-<!-- title: Lizenz und Registrierung -->
+<!-- title: Lizenz anfragen -->
 <!-- scripts: assets/register.js -->
 <!-- narrow -->
-<h1>Lizenz und Registrierung</h1>
-<p class="lead">AkustikMess ist kostenlos. Mit einer Registrierung erhältst du einen persönlichen
-  Lizenzschlüssel – so wissen wir, wer AkustikMess nutzt, und können dich bei wichtigen Änderungen erreichen.</p>
+<h1>Lizenz anfragen</h1>
+<p class="lead">AkustikMess ist kostenlos nutzbar. Für den Download brauchst du eine persönliche Lizenz: Anfrage
+  senden, nach der Freigabe kommen Lizenzschlüssel und Download-Link per E-Mail.</p>
 
 <div class="card" id="regCard" data-enabled="{{registration_enabled}}">
-  <h2>Kostenlos registrieren</h2>
   <form id="regForm" novalidate>
-    <label for="name">Name oder Firma</label>
+    <label for="name">Name</label>
     <input type="text" id="name" name="name" maxlength="100" autocomplete="name" required>
     <label for="email">E-Mail-Adresse</label>
     <input type="email" id="email" name="email" maxlength="254" autocomplete="email" required>
+    <label for="message">Firma / Einsatzzweck (optional)</label>
+    <textarea id="message" name="message" rows="3" maxlength="500"
+              placeholder="z. B. Veranstaltungstechnik, Kirchenbeschallung, Studium …"></textarea>
     <div class="hp" aria-hidden="true"><label for="website">Bitte leer lassen</label>
       <input type="text" id="website" name="website" tabindex="-1" autocomplete="off"></div>
     <label class="check"><input type="checkbox" id="consent" required>
-      <span>Ich habe die <a href="datenschutz.html">Datenschutzerklärung</a> gelesen. Name und E-Mail-Adresse
-        werden zur Ausstellung und Verwaltung der Lizenz gespeichert; die Einwilligung kann ich jederzeit
-        widerrufen.</span></label>
-    <p><button class="primary" id="regSend" type="submit">Lizenzschlüssel anfordern</button></p>
+      <span>Ich habe die <a href="datenschutz.html">Datenschutzerklärung</a> gelesen. Name, E-Mail-Adresse und
+        Angaben werden zur Prüfung, Ausstellung und Verwaltung der Lizenz gespeichert; die Einwilligung kann ich
+        jederzeit widerrufen.</span></label>
+    <p><button class="primary" id="regSend" type="submit">Lizenz anfragen</button></p>
   </form>
   <div id="regMsg" class="msg" role="status"></div>
-  <div id="regKey" class="hidden">
-    <label for="keyText">Dein Lizenzschlüssel</label>
-    <textarea id="keyText" class="key" rows="6" readonly></textarea>
-    <p>In AkustikMess: <b>Hilfe → Lizenz…</b> → Schlüssel einfügen → <b>Übernehmen</b>.</p>
-  </div>
 </div>
-<div class="card notice hidden" id="regSoon">Die Registrierung wird gerade eingerichtet. AkustikMess funktioniert
-  bis dahin uneingeschränkt ohne Lizenz.</div>
+<div class="card notice hidden" id="regSoon">Lizenzanfragen sind gerade nicht möglich. Bitte später erneut versuchen.</div>
+
+<h2>So geht es weiter</h2>
+<ol>
+  <li>Du bekommst eine Eingangsbestätigung per E-Mail.</li>
+  <li>Die Anfrage wird geprüft und freigegeben – in der Regel innerhalb weniger Tage.</li>
+  <li>Du erhältst deinen <b>Lizenzschlüssel</b> und einen <b>Download-Link</b> (einmalig nutzbar, 7 Tage gültig).</li>
+  <li>Später kannst du mit deiner Lizenz jederzeit erneut herunterladen: <a href="index.html#download">Download →
+    „Ich habe eine Lizenz“</a>. Updates lädt AkustikMess mit eingetragener Lizenz selbst.</li>
+</ol>
 
 <h2>Welche Lizenzen gibt es?</h2>
 <table>
@@ -36,8 +41,8 @@
   <tr><td><b>Community</b></td><td>Alle Nutzer – alle Funktionen von AkustikMess</td><td>kostenlos</td></tr>
   <tr><td><b>Testversion / Pro</b></td><td>Für mögliche spätere Zusatzfunktionen oder Support-Pakete</td><td>auf Anfrage</td></tr>
 </table>
-<p>Bereits registriert und Schlüssel verloren? Einfach erneut mit derselben E-Mail-Adresse registrieren – der
-  vorhandene Schlüssel wird noch einmal zugeschickt. Fragen zur Lizenz: siehe <a href="impressum.html">Impressum</a>.</p>
+<p>Schlüssel verloren? Einfach erneut mit derselben E-Mail-Adresse anfragen – Lizenzschlüssel und ein neuer
+  Download-Link werden noch einmal an diese Adresse geschickt. Fragen zur Lizenz: siehe <a href="impressum.html">Impressum</a>.</p>
 <p>Es gelten die <a href="nutzungsbedingungen.html">Nutzungsbedingungen</a>.</p>
 <p class="hint">Der Schlüssel wird nur auf deinem Rechner geprüft; AkustikMess sendet dabei keine Daten.
   Mehr dazu im <a href="wiki/lizenz.html">Wiki</a>.</p>

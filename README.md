@@ -8,7 +8,8 @@ AkustikMess hilft beim Einmessen von Lautsprechersystemen und beim Beurteilen vo
 einem Messmikrofon und einem handelsüblichen Audio-Interface.
 
 **[⬇ Download: akmess.alex-kulow.de](https://akmess.alex-kulow.de)** – die Seite erkennt dein Betriebssystem
-und bietet das passende ZIP-Bundle an.
+Download nur mit Lizenz: Anfrage auf der Website, Freigabe per E-Mail-Link, danach Lizenzschlüssel und einmaliger
+Download-Link per E-Mail (Details: [docs/lizenzserver-einrichtung.md](docs/lizenzserver-einrichtung.md)).
 
 **[📖 Wiki](https://akmess.alex-kulow.de/wiki/index.html)** – Anleitungen zu Messaufbau, allen Modi und häufigen Problemen (Quelle: [docs/wiki](docs/wiki)).
 

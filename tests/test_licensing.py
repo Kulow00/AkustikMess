@@ -106,90 +106,158 @@ def test_tool_issue_and_config(tmp_path):
 
 # --- Lizenzserver --------------------------------------------------------------------------
 
+ZIP_NAME = "AkustikMess-1.0.0-Windows.zip"
+
+
 @pytest.fixture
 def server(tmp_path, monkeypatch):
     from server import license_server as ls
-    cfg = ls.Config({"AKM_DATA": str(tmp_path / "data"), "AKM_SITE": "https://akmess.example"})
+    www = tmp_path / "www"
+    (www / "files").mkdir(parents=True)
+    payload = b"PK" + b"x" * 300_000
+    (www / "files" / ZIP_NAME).write_bytes(payload)
+    signed = json.dumps({"channels": {"stable": "1.0.0"}, "releases": [
+        {"version": "1.0.0", "channel": "stable", "assets": {"windows": {"file": ZIP_NAME, "size": len(payload),
+                                                                      "sha256": "abc"}}}]})
+    (www / "releases.json").write_text(json.dumps({"signed": signed, "signature": ""}), encoding="utf-8")
+    cfg = ls.Config({"AKM_DATA": str(tmp_path / "data"), "AKM_WWW": str(www), "AKM_SITE": "https://akmess.example",
+                     "AKM_ADMIN_EMAIL": "lizenz@example.de", "SMTP_HOST": "smtp.example", "SMTP_FROM": "l@example.de"})
     store = ls.Store(cfg)
     store._key = SERVER_KEY
     mails = []
-    mailer = {"verify": lambda c, to, name, code: mails.append(("verify", to, code)),
-              "license": lambda c, to, name, token: mails.append(("license", to, token))}
+    mailer = {"admin": lambda c, row, tok: mails.append(("admin", c.admin, dict(row), tok)),
+              "received": lambda c, row: mails.append(("received", row["email"])),
+              "license": lambda c, row, lic, tok, again=False: mails.append(("license", row["email"], lic, tok, again))}
     srv = ThreadingHTTPServer(("127.0.0.1", 0), ls.make_handler(store, cfg, ls.RateLimiter(600, 50), mailer))
     threading.Thread(target=srv.serve_forever, daemon=True).start()
-    yield {"url": f"http://127.0.0.1:{srv.server_address[1]}", "store": store, "cfg": cfg, "mails": mails, "ls": ls}
+    yield {"url": f"http://127.0.0.1:{srv.server_address[1]}", "store": store, "cfg": cfg, "mails": mails,
+           "payload": payload, "ls": ls}
     srv.shutdown()
     srv.server_close()
 
 
-def post(url, data, ctype="application/json"):
-    req = urllib.request.Request(url + "/api/register", data=json.dumps(data).encode(), method="POST",
-                                 headers={"Content-Type": ctype})
+def call(url, path, data=None, ctype="application/json", headers=None, method=None):
+    body = None
+    if data is not None:
+        body = data.encode() if isinstance(data, str) else json.dumps(data).encode()
+    req = urllib.request.Request(url + path, data=body, method=method or ("POST" if body is not None else "GET"),
+                                 headers={**({"Content-Type": ctype} if body is not None else {}), **(headers or {})})
     try:
-        with urllib.request.urlopen(req, timeout=5) as r:
-            return r.status, json.loads(r.read())
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return r.status, r.read(), r.headers
     except urllib.error.HTTPError as e:
-        return e.code, json.loads(e.read())
+        return e.code, e.read(), e.headers
 
 
-def get(url):
-    try:
-        with urllib.request.urlopen(url, timeout=5) as r:
-            return r.status, r.read()
-    except urllib.error.HTTPError as e:
-        return e.code, e.read()
+def request_license(s, email="Alex@Example.de"):
+    code, body, _ = call(s["url"], "/api/request", {"name": "Alex K", "email": email, "message": "FOH-Technik",
+                                                    "consent": True})
+    assert code == 200 and json.loads(body) == {"status": "requested"}
 
 
-def test_register_without_mail_issues_directly(server):
-    code, res = post(server["url"], {"name": "Alex K", "email": "Alex@Example.de", "consent": True})
-    assert code == 200 and res["status"] == "issued"
-    lic = licensing.parse(res["license"])
-    assert lic.email == "alex@example.de" and lic.plan == "community" and lic.issuer == "server"
-    assert post(server["url"], {"name": "A", "email": "x@y.de", "consent": True})[0] == 400       # Name zu kurz
-    assert post(server["url"], {"name": "Alex", "email": "kein-mail", "consent": True})[0] == 400
-    assert post(server["url"], {"name": "Alex", "email": "x@y.de", "consent": False})[0] == 400
-    assert post(server["url"], {"name": "Alex", "email": "x@y.de", "consent": True}, "text/plain")[0] == 415
-    assert post(server["url"], {"name": "Bot", "email": "b@y.de", "consent": True, "website": "spam"}) \
-        == (200, {"status": "verify_sent"})
-    assert server["store"].db.execute("SELECT COUNT(*) FROM licenses WHERE email='b@y.de'").fetchone()[0] == 0
-    for _ in range(2):
-        post(server["url"], {"name": "Alex K", "email": "alex@example.de", "consent": True})
-    assert post(server["url"], {"name": "Alex K", "email": "alex@example.de", "consent": True})[0] == 429
+def approve(s):
+    admin = [m for m in s["mails"] if m[0] == "admin"][-1]
+    review = admin[3]
+    code, page, _ = call(s["url"], f"/api/review?t={review}")
+    assert code == 200 and b"Alex K" in page and b"FOH-Technik" in page and b"approve" in page
+    assert s["store"].get(admin[2]["id"])["status"] == "requested"            # Öffnen allein gibt nicht frei
+    code, page, _ = call(s["url"], "/api/review", f"t={review}&action=approve", "application/x-www-form-urlencoded")
+    assert code == 200 and b"Lizenz erteilt" in page
+    return [m for m in s["mails"] if m[0] == "license"][-1]
 
 
-def test_register_with_mail_verification_and_revocation(server):
-    server["cfg"].smtp.update(host="smtp.example", **{"from": "lizenz@example"})
-    code, res = post(server["url"], {"name": "Alex K", "email": "a@example.de", "consent": True})
-    assert (code, res) == (200, {"status": "verify_sent"}) and server["mails"][0][0] == "verify"
-    code_link = server["mails"][0][2]
-    status, page = get(server["url"] + "/api/verify?t=" + code_link)
-    assert status == 200 and b"AKM1." in page
-    token = server["mails"][1][2]
-    assert server["mails"][1][0] == "license" and licensing.parse(token).name == "Alex K"
-    assert get(server["url"] + "/api/verify?t=" + code_link)[0] == 400                # nur einmal gültig
-    # erneute Registrierung: Schlüssel noch einmal zusenden, gleiche Antwort (verrät nichts)
-    assert post(server["url"], {"name": "Alex K", "email": "a@example.de", "consent": True})[1] == {"status": "verify_sent"}
-    assert server["mails"][-1] == ("license", "a@example.de", token)
-    # sperren → Sperrliste signiert und für das Programm lesbar
-    lic_id = licensing.parse(token).id
-    assert server["store"].revoke(lic_id, "Missbrauch")
-    assert server["store"].revoke("L-OFFLINE12345")                                  # offline ausgestellt
-    status, raw = get(server["url"] + "/api/revocations")
-    assert status == 200 and licensing.parse_revocations(raw) == {lic_id, "L-OFFLINE12345"}
-    # DSGVO-Löschung
-    assert server["store"].delete_person("a@example.de") == 1
-    row = server["store"].db.execute("SELECT * FROM licenses WHERE id=?", (lic_id,)).fetchone()
-    assert row["email"] == "" and row["name"] == "" and row["token"] is None and row["status"] == "revoked"
+def test_request_needs_approval_and_mails(server):
+    s = server
+    request_license(s)
+    kinds = [m[0] for m in s["mails"]]
+    assert kinds == ["admin", "received"] and s["mails"][0][1] == "lizenz@example.de"
+    assert s["mails"][0][2]["email"] == "alex@example.de"
+    # zweite Anfrage derselben Adresse während offener Anfrage: keine neue Admin-Mail
+    request_license(s)
+    assert [m[0] for m in s["mails"]].count("admin") == 1
+    lic_mail = approve(s)
+    lic = licensing.parse(lic_mail[2])
+    assert lic.email == "alex@example.de" and lic.issuer == "server" and lic_mail[1] == "alex@example.de"
+    # Prüf-Link nur einmal nutzbar
+    review = s["mails"][0][3]
+    assert call(s["url"], "/api/review", f"t={review}&action=approve", "application/x-www-form-urlencoded")[0] == 410
+    # Validierung und Honigtopf
+    assert call(s["url"], "/api/request", {"name": "A", "email": "x@y.de", "consent": True})[0] == 400
+    assert call(s["url"], "/api/request", {"name": "Alex", "email": "x@y.de", "consent": False})[0] == 400
+    assert call(s["url"], "/api/request", {"name": "Bot", "email": "b@y.de", "consent": True, "website": "x"})[0] == 200
+    assert s["store"].db.execute("SELECT COUNT(*) FROM licenses WHERE email='b@y.de'").fetchone()[0] == 0
+
+
+def test_one_time_download_link(server):
+    s = server
+    request_license(s)
+    tok = approve(s)[3]
+    code, page, _ = call(s["url"], f"/api/download?t={tok}")
+    assert code == 200 and ZIP_NAME.encode() in page and b"Windows" in page
+    assert call(s["url"], f"/api/file/{ZIP_NAME}")[0] == 403                        # ohne Link/Lizenz
+    code, data, headers = call(s["url"], f"/api/file/{ZIP_NAME}?t={tok}")
+    assert code == 200 and data == s["payload"] and "attachment" in headers["Content-Disposition"]
+    assert call(s["url"], f"/api/file/{ZIP_NAME}?t={tok}")[0] == 403                # nur einmal
+    assert call(s["url"], f"/api/download?t={tok}")[0] == 410
+    # Größe für die Online-Prüfung ohne Lizenz, aber keine Pfade außerhalb von files/
+    code, _, headers = call(s["url"], f"/api/file/{ZIP_NAME}", method="HEAD")
+    assert code == 200 and int(headers["Content-Length"]) == len(s["payload"])
+    assert call(s["url"], "/api/file/..%2Freleases.json", method="HEAD")[0] == 404
+
+
+def test_redownload_with_license_and_update_header(server):
+    s = server
+    request_license(s)
+    key = approve(s)[2]
+    lic_id = licensing.parse(key).id
+    code, body, _ = call(s["url"], "/api/redownload", {"license": key[:30] + "\n" + key[30:]})
+    url = json.loads(body)["url"]
+    assert code == 200 and url.startswith("/api/download?t=")
+    assert call(s["url"], url)[0] == 200
+    code, body, _ = call(s["url"], "/api/redownload", {"email": "ALEX@example.de", "id": lic_id.lower()})
+    assert code == 200 and "url" in json.loads(body)
+    assert call(s["url"], "/api/redownload", {"email": "fremd@example.de", "id": lic_id})[0] == 403
+    assert call(s["url"], "/api/redownload", {"license": "AKM1.kaputt.x"})[0] == 400
+    # Programm-Update mit Lizenz im Header
+    code, data, _ = call(s["url"], f"/api/file/{ZIP_NAME}", headers={"X-AKM-License": key})
+    assert code == 200 and data == s["payload"]
+    assert call(s["url"], f"/api/file/{ZIP_NAME}", headers={"X-AKM-License": "AKM1.x.y"})[0] == 401
+    # Root-Lizenz (offline ausgestellt) funktioniert auch
+    pro = licensing.sign(payload(id="L-PRO123456789", plan="pro"), ROOT_KEY, "root")
+    assert call(s["url"], f"/api/file/{ZIP_NAME}", headers={"X-AKM-License": pro})[0] == 200
+    # gesperrt → kein Download mehr
+    s["store"].revoke(lic_id, "Missbrauch")
+    assert call(s["url"], f"/api/file/{ZIP_NAME}", headers={"X-AKM-License": key})[0] == 403
+    assert call(s["url"], "/api/redownload", {"license": key})[0] == 403
+    status, raw, _ = call(s["url"], "/api/revocations")
+    assert lic_id in licensing.parse_revocations(raw)
+    # bereits lizenziert und erneut angefragt → Schlüssel + neuer Link per Mail (nach Entsperren)
+    s["store"].revoke(lic_id, undo=True)
+    request_license(s)
+    assert s["mails"][-1][0] == "license" and s["mails"][-1][4] is True
+
+
+def test_reject_and_gdpr_delete(server):
+    s = server
+    request_license(s, "b@example.de")
+    review = s["mails"][-2][3]
+    code, page, _ = call(s["url"], "/api/review", f"t={review}&action=reject", "application/x-www-form-urlencoded")
+    assert code == 200 and b"abgelehnt" in page
+    row = s["store"].db.execute("SELECT * FROM licenses WHERE email='b@example.de'").fetchone()
+    assert row["status"] == "rejected"
+    assert s["store"].delete_person("b@example.de") == 1
 
 
 def test_server_rejects_oversized_and_unknown(server):
-    req = urllib.request.Request(server["url"] + "/api/register", data=b"x" * 5000, method="POST",
+    req = urllib.request.Request(server["url"] + "/api/request", data=b"x" * 9000, method="POST",
                                  headers={"Content-Type": "application/json"})
     with pytest.raises(urllib.error.HTTPError) as e:
         urllib.request.urlopen(req, timeout=5)
     assert e.value.code == 413
-    assert get(server["url"] + "/api/admin")[0] == 404
-    assert get(server["url"] + "/api/health") == (200, b'{"ok": true}')
+    assert call(server["url"], "/api/admin")[0] == 404
+    assert call(server["url"], "/api/register", {"name": "x"})[0] == 404           # alter Ablauf entfernt
+    assert call(server["url"], "/api/health")[:2] == (200, b'{"ok": true}')
+    assert call(server["url"], "/api/review?t=falsch")[0] == 410
 
 
 # --- Oberfläche ---------------------------------------------------------------------------
@@ -199,7 +267,7 @@ def test_gui_license_dialog_and_enforcement(tmp_path, monkeypatch):
     from akustik.gui.license_dialog import LicenseDialog
     app, w = make_window(tmp_path, start=False)
     try:
-        assert w.licenses.enabled and w.btn_license.text() == "Kostenlos registrieren"
+        assert w.licenses.enabled and w.btn_license.text() == "Lizenz anfragen"
         dlg = LicenseDialog(w.licenses, w)
         dlg.edit.setPlainText("Unsinn")
         dlg.apply()

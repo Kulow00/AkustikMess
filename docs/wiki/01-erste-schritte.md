@@ -2,8 +2,9 @@
 
 ## Installieren
 
-AkustikMess wird als ZIP-Datei verteilt – keine Installation, keine Administratorrechte. Die Download-Seite bietet
-automatisch die passende Datei für dein System an.
+AkustikMess ist kostenlos; zum Herunterladen brauchst du eine persönliche Lizenz ([Lizenz anfragen](lizenz.html)).
+Nach der Freigabe kommt ein Download-Link per E-Mail, der die passende ZIP-Datei für dein System anbietet –
+keine Installation, keine Administratorrechte.
 
 - **Windows 10/11:** ZIP entpacken (Rechtsklick → „Alle extrahieren“), den Ordner **AkustikMess** an einen festen Platz
   legen (z. B. *Dokumente*) und **„AkustikMess starten.bat“** doppelklicken. Fragt Windows nach, „Ausführen“ wählen.

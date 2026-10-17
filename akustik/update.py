@@ -30,6 +30,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
@@ -212,8 +213,12 @@ def select_update(manifest: dict, current: str = __version__, channel: str = "st
 
 # --- Download und Installation ---------------------------------------------------------
 
-def download(asset: dict, progress=None, cancel=None, timeout: float = 60) -> str:
-    """Lädt die Installationsdatei, prüft Größe und SHA-256. Liefert den Dateipfad."""
+def download(asset: dict, progress=None, cancel=None, timeout: float = 60, license_key: str = "") -> str:
+    """Lädt die Installationsdatei, prüft Größe und SHA-256. Liefert den Dateipfad.
+
+    Downloads sind lizenzpflichtig: der Lizenzschlüssel geht im Header ``X-AKM-License`` an den eigenen
+    Server (nur dorthin, nur per https), der ihn prüft und die Datei ausliefert.
+    """
     url = asset["url"]
     name = os.path.basename(asset.get("file") or "AkustikMess-Update")
     folder = tempfile.mkdtemp(prefix="akustikmess-update-")
@@ -222,7 +227,12 @@ def download(asset: dict, progress=None, cancel=None, timeout: float = 60) -> st
     total = int(asset.get("size") or 0)
     done = 0
     try:
-        with _open(url, timeout) as r, open(path, "wb") as fh:
+        check_url_allowed(direct_url(url))
+        headers = {"User-Agent": USER_AGENT}
+        if license_key:
+            headers["X-AKM-License"] = license_key
+        req = urllib.request.Request(direct_url(url), headers=headers)
+        with urllib.request.urlopen(req, timeout=timeout) as r, open(path, "wb") as fh:  # noqa: S310
             while True:
                 if cancel is not None and cancel():
                     raise UpdateError("Download abgebrochen.")
@@ -236,6 +246,11 @@ def download(asset: dict, progress=None, cancel=None, timeout: float = 60) -> st
                     progress(done, total)
     except UpdateError:
         raise
+    except urllib.error.HTTPError as exc:
+        if exc.code in (401, 403):
+            raise UpdateError("Für Updates ist eine gültige Lizenz nötig: Hilfe → Lizenz… (Lizenz auf "
+                              "akmess.alex-kulow.de anfragen).") from exc
+        raise UpdateError(f"Download fehlgeschlagen: {exc}") from exc
     except Exception as exc:  # noqa: BLE001
         raise UpdateError(f"Download fehlgeschlagen: {exc}") from exc
     if total and done != total:

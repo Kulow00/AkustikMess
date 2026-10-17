@@ -108,9 +108,7 @@ def build(out: Path, cfg: dict, today: dt.date | None = None) -> list[str]:
         "legal_notice": ('<p class="notice">Die Angaben auf dieser Seite werden gerade ergänzt.</p>'
                          if missing else ""),
         "registration_enabled": "true" if registration else "false",
-        "register_teaser": ('<div class="card"><b>Kostenlos registrieren:</b> persönlichen Lizenzschlüssel '
-                            'anfordern – <a href="registrieren.html">zur Registrierung</a>.</div>'
-                            if registration else ""),
+        "register_teaser": "",
     }
     layout = (SITE_DIR / "layout.html").read_text(encoding="utf-8")
     out.mkdir(parents=True, exist_ok=True)

@@ -39,7 +39,8 @@ def test_registration_needs_legal_info(tmp_path):
     assert "werden gerade ergänzt" in (out / "impressum.html").read_text(encoding="utf-8")
     warnings, out = build(tmp_path / "b", registration=True, **LEGAL)
     assert not warnings and 'data-enabled="true"' in (out / "registrieren.html").read_text(encoding="utf-8")
-    assert "zur Registrierung" in (out / "index.html").read_text(encoding="utf-8")
+    idx = (out / "index.html").read_text(encoding="utf-8")
+    assert "Lizenz anfragen" in idx and "Ich habe eine Lizenz" in idx and "/api/file/" not in idx
 
 
 def test_config_values_are_escaped(tmp_path):

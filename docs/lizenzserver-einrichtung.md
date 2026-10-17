@@ -1,5 +1,10 @@
 # Lizenzserver und Homepage einrichten (nur für den Projektinhaber)
 
+**Ablauf für Nutzer:** Website → „Lizenz anfragen“ → E-Mail mit Prüf-Link an `AKM_ADMIN_EMAIL` → auf der
+Prüfseite „Lizenz erteilen“ klicken → Nutzer bekommt Lizenzschlüssel + einmaligen Download-Link (7 Tage).
+Danach Download jederzeit über „Ich habe eine Lizenz“ (Schlüssel oder E-Mail + Lizenz-ID); Updates lädt das
+Programm mit dem Schlüssel. Programmdateien sind **nicht** frei abrufbar (Caddy sperrt `/files/`).
+
 Voraussetzung: [server-einrichtung.md](server-einrichtung.md) ist erledigt (Domain, Caddy, Upload).
 Alle Befehle auf dem Server als Benutzer mit `sudo`.
 
@@ -57,6 +62,10 @@ akmess.alex-kulow.de {
 	handle /api/* {
 		reverse_proxy akmess-license:8080
 	}
+	# Programmdateien nur über den Lizenzserver (/api/file/…), nie direkt
+	handle /files/* {
+		respond "Download nur mit Lizenz: https://akmess.alex-kulow.de/#download" 403
+	}
 	handle {
 		root * /srv/akmess
 		file_server
@@ -112,6 +121,10 @@ Programm eingebaut). Danach zeigt AkustikMess „Kostenlos registrieren“ in de
 
 | Aufgabe | Befehl |
 |---|---|
+| Offene Anfragen | `docker exec akmess-license python license_server.py requests` |
+| Anfrage freigeben (ohne E-Mail-Link) | `docker exec akmess-license python license_server.py approve L-XXXX` |
+| Anfrage ablehnen | `docker exec akmess-license python license_server.py reject L-XXXX` |
+| Neuen Download-Link senden | `docker exec akmess-license python license_server.py link L-XXXX` |
 | Registrierungen ansehen | `docker exec akmess-license python license_server.py list --search TEXT` |
 | Statistik | `docker exec akmess-license python license_server.py stats` |
 | Lizenz sperren | `docker exec akmess-license python license_server.py revoke L-XXXX --reason "…"` |

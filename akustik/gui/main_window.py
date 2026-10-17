@@ -169,7 +169,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.btn_license.setText(f"✔ {st.license.plan_label}")
             self.btn_license.setStyleSheet("color: gray;")
         elif st.state == "none":
-            self.btn_license.setText("Kostenlos registrieren")
+            self.btn_license.setText("Lizenz anfragen")
             self.btn_license.setStyleSheet("color: #ffaa33; font-weight: bold;")
         else:
             self.btn_license.setText(f"⚠ Lizenz: {st.message}")
