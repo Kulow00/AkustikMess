@@ -47,12 +47,10 @@ def main() -> int:
     win.show()
     # große Module (scipy.signal) kurz nach dem Öffnen im Hintergrund vorladen – das Fenster ist sofort da,
     # und bis zum ersten Messen ist alles geladen
-    import threading
-
     from PySide6 import QtCore
 
-    from ._lazy import preload
-    QtCore.QTimer.singleShot(300, lambda: threading.Thread(target=preload, name="Vorladen", daemon=True).start())
+    from ._lazy import preload_async
+    QtCore.QTimer.singleShot(0, preload_async)
     return app.exec()
 
 

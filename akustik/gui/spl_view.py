@@ -288,8 +288,15 @@ class SPLView(QtWidgets.QWidget):
         cal = self.state.calibration_for(ch)
         self.cal_warning.setText("" if cal is not None else
                                  "Nicht kalibriert – Werte in dBFS (re. Vollaussteuerung)")
-        # Bewertungsfilter erst bei laufendem Audio entwerfen (lädt scipy – nicht schon beim Programmstart)
-        self.meter = SPLMeter(self.state.fs, cal if cal is not None else 0.0) if self.state.engine else None
+        # Bewertungsfilter brauchen scipy. Ist es noch nicht geladen, startet die SPL-Messung kurz danach
+        # (siehe update) – so muss der Audiostart nie auf das Laden warten.
+        from .._lazy import preload_async, signal_ready
+        if self.state.engine is not None and signal_ready():
+            self.meter = SPLMeter(self.state.fs, cal if cal is not None else 0.0)
+        else:
+            self.meter = None
+            if self.state.engine is not None:
+                preload_async()
         self.pos = self.state.engine.ring.total if self.state.engine else 0
         self.sec_energy = {"A": 0.0, "C": 0.0}
         self.sec_samples = 0
@@ -301,6 +308,10 @@ class SPLView(QtWidgets.QWidget):
 
     def process(self) -> None:
         eng = self.state.engine
+        if eng is not None and self.meter is None:
+            from .._lazy import signal_ready
+            if signal_ready():
+                self.reset()              # Filter sind jetzt verfügbar → SPL-Messung beginnt
         if eng is None or self.meter is None:
             return
         ch = self.cb_ch.currentData() or 0

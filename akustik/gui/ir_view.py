@@ -22,6 +22,26 @@ VIEWS = ["Linear", "Logarithmisch", "ETC (Energie-Zeit-Kurve)", "Schroeder-Abkli
          "Spektrogramm", "Frequenzgang"]
 
 
+def cut_ir(h: np.ndarray, fs: float, tail: float) -> tuple[np.ndarray, str]:
+    """Ausschnitt um die Impulsspitze statt ab Messbeginn.
+
+    Ohne Loopback-Referenz oder mit getrennten Ein-/Ausgabegeräten enthält die Impulsantwort die gesamte
+    Latenz von Interface und Treibern (oft 20–500 ms). Ein fester Ausschnitt ab Messbeginn verfehlt die
+    eigentliche Antwort dann – das Diagramm blieb leer. Liefert (Ausschnitt, Hinweistext).
+    """
+    pk = int(np.argmax(np.abs(h)))
+    start = max(0, pk - int(0.05 * fs))                       # 50 ms Vorlauf vor der Spitze
+    cut = h[start: start + int((tail + 0.1) * fs)]
+    tail_part = h[int(len(h) * 0.9):] if len(h) > 10 else h
+    noise = float(np.sqrt(np.mean(tail_part ** 2))) + 1e-20
+    snr = 20 * np.log10(abs(h[pk]) / noise + 1e-20)
+    info = f"Impulsspitze bei {1000 * pk / fs:.1f} ms"
+    if snr < 20:
+        info += (f" – KEINE deutliche Impulsantwort (nur {snr:.0f} dB über dem Rauschen): Ausgang, Messkanal, "
+                 "Pegel und Mikrofon prüfen")
+    return cut, info
+
+
 class MeasureWorker(QtCore.QThread):
     finished_ok = QtCore.Signal(object, float, str)   # ir, fs, info
     failed = QtCore.Signal(str)
@@ -56,8 +76,8 @@ class MeasureWorker(QtCore.QThread):
                 h = impulse.deconvolve(meas, ref, fs, p["f1"], p["f2"])
                 acc = h if acc is None else acc + h
             h = acc / p["averages"]
-            h = h[: int((p["tail"] + 0.1) * fs)]
-            info = f"Spitzenpegel Aufnahme: {20 * np.log10(peak + 1e-12):.1f} dBFS"
+            h, info = cut_ir(h, fs, p["tail"])
+            info += f" · Spitzenpegel Aufnahme: {20 * np.log10(peak + 1e-12):.1f} dBFS"
             if peak > 0.98:
                 info += " – ÜBERSTEUERT, Pegel reduzieren!"
             elif peak < 0.01:
@@ -325,7 +345,9 @@ class ImpulseView(QtWidgets.QWidget):
                     self.p_time.addLine(y=y, pen=pg.mkPen("#888", style=QtCore.Qt.DashLine))
             if view != "Linear":
                 self.p_time.setYRange(-100, 2)
-            self.p_time.enableAutoRange(axis="x")
+            else:
+                self.p_time.enableAutoRange(axis="y")
+            self.p_time.setXRange(0, float(t[-1]) if len(t) else 1.0, padding=0.02)  # immer ganz zeigen
         elif view == "Frequenzgang":
             self.stack.setCurrentWidget(self.p_freq)
             start = max(0, impulse.ir_start(h) - int(0.002 * self.fs))

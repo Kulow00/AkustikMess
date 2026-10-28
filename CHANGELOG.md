@@ -12,6 +12,7 @@ Veröffentlichen den Abschnitt der neuen Version und übernimmt ihn als Patch No
 ## [Unreleased]
 
 ### Geändert
+- Übertragungsfunktion: Laufzeit wird nach dem Start automatisch gefunden – Phase und Betrag sind sofort vollständig (abschaltbar: „Laufzeit automatisch finden“)
 - Verteilung als ZIP-Paket je System statt Installer: entpacken und „AkustikMess starten“ ausführen – keine Installation und keine Administratorrechte nötig; Updates tauschen den Programmordner automatisch aus
 - AkustikMess ist jetzt Closed Source und kostenlos nutzbar nach den Nutzungsbedingungen (frühere Versionen bleiben GPL)
 - Fehler und Ideen melden über Hilfe → „Fehler melden / Idee vorschlagen…“ (öffentliches Feedback-Verzeichnis)
@@ -37,6 +38,11 @@ Veröffentlichen den Abschnitt der neuen Version und übernimmt ihn als Patch No
 
 ### Behoben
 - Fernbedienung: Bei falschem Zugangsschlüssel kam teilweise ein Verbindungsabbruch statt der Meldung „Zugriff verweigert“
+
+### Behoben
+- Audio starten hing beim ersten Mal einige Sekunden, weil eine Rechenbibliothek nachgeladen wurde
+- Impulsantwort wurde bei großer Latenz (ohne Loopback-Referenz oder mit getrennten Ein-/Ausgabegeräten) nicht im Diagramm angezeigt; jetzt wird um die Impulsspitze ausgeschnitten und eine fehlende Impulsantwort klar gemeldet
+
 
 ## [0.5.0-beta.5] - 2026-10-16
 

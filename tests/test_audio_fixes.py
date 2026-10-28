@@ -169,3 +169,47 @@ def test_calibrated_spectrum_keeps_full_range(tmp_path):
         assert rt.sp_view_spec_bot.minimum() == pytest.approx(off - 150)
     finally:
         w.close()
+
+
+def test_auto_delay_after_start(tmp_path):
+    """Phase sofort brauchbar: die Laufzeit wird nach dem Start automatisch gefunden."""
+    app, w = make_window(tmp_path, start=True)
+    rt = w.realtime
+    try:
+        assert rt.chk_auto_delay.isChecked()
+        for _ in range(60):
+            wait(app, 0.1)
+            if rt.sp_delay.value() > 0:
+                break
+        assert rt.sp_delay.value() == pytest.approx(8.0, abs=0.2)        # simulierter Raum: 8 ms
+        assert "automatisch" in rt.status.text() or "Laufzeit-Kompensation" in rt.status.text()
+        wait(app, 1.0)
+        x, y = rt.c_phase.getData()
+        band = (x > 2.0) & (x < 4.0)                                       # 100 Hz … 10 kHz
+        assert np.mean(np.isfinite(y[band])) > 0.9
+        # nur einmal automatisch: eine manuelle Änderung bleibt bestehen
+        rt.sp_delay.setValue(3.0)
+        wait(app, 1.5)
+        assert rt.sp_delay.value() == 3.0
+    finally:
+        w.close()
+
+
+def test_ir_cut_around_peak():
+    """Impulsantwort mit großer Latenz (ohne Loopback / getrennte Geräte) bleibt sichtbar."""
+    from akustik.gui.ir_view import cut_ir
+    fs = 48000
+    h = np.random.default_rng(0).standard_normal(fs * 4) * 1e-4
+    h[int(0.4 * fs)] = 1.0                                                 # 400 ms Latenz
+    cut, info = cut_ir(h, fs, 1.5)
+    assert np.argmax(np.abs(cut)) == int(0.05 * fs) and "400.0 ms" in info and "KEINE" not in info
+    _, info = cut_ir(np.random.default_rng(1).standard_normal(fs), fs, 1.5)
+    assert "KEINE deutliche Impulsantwort" in info
+
+
+def test_windows_without_scipy_match_scipy():
+    import scipy.signal as s
+    from akustik.dsp.spectrum import WINDOWS, make_window
+    for name, kind in WINDOWS.items():
+        for n in (256, 1001, 16384):
+            assert np.allclose(make_window(name, n), s.get_window(kind, n, fftbins=True), atol=1e-12)

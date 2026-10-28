@@ -195,8 +195,16 @@ class RealtimeView(QtWidgets.QWidget):
         f.addRow("Glättung", self.cb_smooth)
         f.addRow("Verzögerung", self.sp_delay)
         f.addRow(self.btn_delay)
+        self.chk_auto_delay = QtWidgets.QCheckBox("Laufzeit automatisch finden")
+        self.chk_auto_delay.setChecked(True)
+        self.chk_auto_delay.setToolTip("Sucht die Laufzeit selbst, sobald ein Referenzsignal anliegt (nach dem Start "
+                                       "und nach dem Wechsel von Referenz/Messkanal). Ohne Laufzeitausgleich ist die "
+                                       "Kohärenz im Hochton gering und Phase/Betrag erscheinen nur lückenhaft.")
+        f.addRow(self.chk_auto_delay)
         f.addRow("Kohärenz-Schwelle", self.sp_coh)
         f.addRow(self.chk_blank)
+        for w in (self.cb_ref, self.cb_meas):
+            w.currentIndexChanged.connect(self._arm_auto_delay)
         for w in (self.cb_ref, self.cb_meas, self.cb_tf_fft, self.cb_tf_avg):
             w.currentIndexChanged.connect(self._reset_tf)
         self.sp_delay.valueChanged.connect(self._reset_tf)
@@ -345,6 +353,7 @@ class RealtimeView(QtWidgets.QWidget):
             self.timer.stop()
             self.status.setText("Kein Audio-Gerät aktiv")
             return
+        self._arm_auto_delay()
         self._reset_spectrum()
         self._reset_tf()
         self.timer.start()
@@ -383,7 +392,27 @@ class RealtimeView(QtWidgets.QWidget):
         return 32768 if fft == MTW else int(fft)
 
     # --- Messung --------------------------------------------------------------
-    def find_delay(self) -> None:
+    AUTO_DELAY_AFTER_S = 0.7   # so lange muss die Referenz anliegen, bevor automatisch gesucht wird
+
+    def _arm_auto_delay(self, *_) -> None:
+        self._auto_delay_pending = True
+        self._ref_since = None
+
+    def _auto_delay(self, ref_active: bool) -> None:
+        """Einmal automatisch die Laufzeit suchen, sobald die Referenz lange genug anliegt."""
+        if not (self.chk_auto_delay.isChecked() and getattr(self, "_auto_delay_pending", False)):
+            return
+        if not ref_active:
+            self._ref_since = None
+            return
+        now = time.monotonic()
+        if getattr(self, "_ref_since", None) is None:
+            self._ref_since = now
+        elif now - self._ref_since >= self.AUTO_DELAY_AFTER_S:
+            self._auto_delay_pending = False
+            self.find_delay(auto=True)
+
+    def find_delay(self, auto: bool = False) -> None:
         eng = self.state.engine
         if eng is None:
             return
@@ -395,7 +424,8 @@ class RealtimeView(QtWidgets.QWidget):
             return
         d = find_delay(ref, meas, max_delay=int(eng.fs))
         self.sp_delay.setValue(1000 * d / eng.fs)
-        self.status.setText(f"Laufzeit: {1000 * d / eng.fs:.2f} ms ≈ {343 * d / eng.fs:.2f} m")
+        self.status.setText(f"Laufzeit{' (automatisch)' if auto else ''}: {1000 * d / eng.fs:.2f} ms "
+                            f"≈ {343 * d / eng.fs:.2f} m")
 
     def update_plots(self) -> None:
         eng = self.state.engine
@@ -475,7 +505,9 @@ class RealtimeView(QtWidgets.QWidget):
             return
         n = self.tf.length
         d = int(round(self.sp_delay.value() * 1e-3 * eng.fs))
-        if np.std(eng.ring.latest(4096, ref_ch)) < 1e-7:
+        ref_active = np.std(eng.ring.latest(4096, ref_ch)) >= 1e-7
+        self._auto_delay(ref_active)
+        if not ref_active:
             self.status.setText("Referenz stumm – für die Übertragungsfunktion den Generator "
                                 "einschalten oder ein Musiksignal anlegen.")
             return

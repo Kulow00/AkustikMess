@@ -16,8 +16,19 @@ WINDOWS = {
 }
 
 
+# Kosinus-Koeffizienten (periodische Fenster, wie scipy.signal.get_window mit fftbins=True)
+_COSINE = {"hann": (0.5, 0.5), "blackman": (0.42, 0.5, 0.08),
+           "blackmanharris": (0.35875, 0.48829, 0.14128, 0.01168),
+           "flattop": (0.21557895, 0.41663158, 0.277263158, 0.083578947, 0.006947368)}
+
+
 def make_window(name: str, n: int) -> np.ndarray:
-    return signal.get_window(WINDOWS.get(name, "hann"), n, fftbins=True)
+    """Fensterfunktion – rein mit numpy, damit der Audiostart nicht auf scipy warten muss."""
+    kind = WINDOWS.get(name, "hann")
+    if kind == "boxcar" or n < 2:
+        return np.ones(n)
+    k = 2 * np.pi * np.arange(n) / n
+    return sum((-1) ** i * a * np.cos(i * k) for i, a in enumerate(_COSINE[kind]))
 
 
 def power_spectrum(x: np.ndarray, window: np.ndarray) -> np.ndarray:

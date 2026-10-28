@@ -36,3 +36,26 @@ def preload() -> None:
             m._load()  # noqa: SLF001
         except Exception:  # noqa: BLE001 – wird beim echten Gebrauch erneut versucht und gemeldet
             pass
+
+
+def signal_ready() -> bool:
+    """True, sobald scipy.signal geladen ist (Aufrufe blockieren dann nicht mehr)."""
+    import sys  # noqa: PLC0415
+    if signal.__dict__["_mod"] is not None:
+        return True
+    # schon anderweitig vollständig importiert? (Während des Imports steht das Modul bereits halb geladen
+    # in sys.modules – dann wäre ein Zugriff blockierend.)
+    m = sys.modules.get("scipy.signal")
+    return m is not None and not getattr(getattr(m, "__spec__", None), "_initializing", False)
+
+
+_preload_thread = None
+
+
+def preload_async() -> None:
+    """Vorladen in einem Hintergrund-Thread starten (höchstens einmal)."""
+    import threading  # noqa: PLC0415
+    global _preload_thread
+    if _preload_thread is None and not signal_ready():
+        _preload_thread = threading.Thread(target=preload, name="Vorladen", daemon=True)
+        _preload_thread.start()

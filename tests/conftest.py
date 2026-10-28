@@ -9,6 +9,10 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+# scipy vorab laden: im Programm geschieht das im Hintergrund; Tests sollen nicht davon abhängen,
+# wann das Laden fertig ist (z. B. Beginn der SPL-Messung)
+import scipy.signal  # noqa: E402,F401
+
 from PySide6 import QtCore, QtWidgets  # noqa: E402
 
 from akustik.audio.engine import SIMULATION, AudioConfig  # noqa: E402
