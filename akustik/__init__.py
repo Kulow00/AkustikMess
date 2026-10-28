@@ -7,7 +7,7 @@ import os as _os
 for _var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
     _os.environ.setdefault(_var, "1")
 
-__version__ = "0.5.0-beta.5"
-RELEASE_DATE = "2026-10-16"  # vom Release-Werkzeug gesetzt (JJJJ-MM-TT)
+__version__ = "0.5.0-beta.6"
+RELEASE_DATE = "2026-10-28"  # vom Release-Werkzeug gesetzt (JJJJ-MM-TT)
 APP_NAME = "AkustikMess"
 COPYRIGHT = "Copyright © 2026 Alex Kulow"
